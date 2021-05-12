@@ -1,5 +1,5 @@
 202Y - MM - dd
-Present: Leon, Christiaan, Patrick, Yang, Elena
+Present: Elena, Patrick, Yang, Christiaan, Leon
 
 ## Commitments from last retrospective:
 <copy from last retrospective>
