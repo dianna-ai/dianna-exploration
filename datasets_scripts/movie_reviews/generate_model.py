@@ -287,7 +287,7 @@ if __name__ == '__main__':
             # ensure we are in eval mode
             model.eval()
             torch.save(model, 'movie_review_model.pytorch')
-    
+
     # stop here if doing a wandb sweep
     if not args.nosweep:
         exit()
@@ -301,7 +301,10 @@ if __name__ == '__main__':
 
     # store as ONNX, needs example input
     x = next(iter(train_data_iterator))[0].to(device)
-    torch.onnx.export(loaded_model, x, 'movie_review_model.onnx', opset_version=11)
+    torch.onnx.export(loaded_model, x, 'movie_review_model.onnx', opset_version=11,
+                      export_params=True, input_names=['input'], output_names=['output'],
+                      dynamic_axes={'input': {0: 'batch_size', 1: 'sentence_length'},
+                                    'output': {0: 'batch_size'}})
 
     # create predictor
     predict_sentiment = Predictor(loaded_model, tokenizer, vocab, device, max_filter_size=max(config.filter_sizes))
