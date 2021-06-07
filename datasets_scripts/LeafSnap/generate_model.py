@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import os
+import numpy as np
 import tqdm
 import argparse
 
@@ -12,8 +13,14 @@ import torch.nn.functional as F
 from torchvision import datasets, transforms
 
 
+def valid_file(fname):
+    # dataset consists of .jpg images
+    # converted to .bmp for faster loading
+    return fname.endswith('.bmp')
+
+
 class Network(nn.Module):
-    def __init__(self, img_size, num_classes, kernel_size, pooling_size, num_channels):
+    def __init__(self, img_size, num_classes, kernel_size, pooling_size, num_channels, dropout):
         super().__init__()
 
         self.num = len(num_channels)
@@ -38,6 +45,8 @@ class Network(nn.Module):
         reduced_img_size = int(img_size / pooling_size ** len(self.pool_layers))
         self.final_layer_size = num_channels[-1] * reduced_img_size ** 2
 
+        self.drop = nn.Dropout(dropout)
+
         self.fc1 = nn.Linear(self.final_layer_size, num_classes)
 
     def forward(self, data):
@@ -52,7 +61,7 @@ class Network(nn.Module):
                 data = F.relu(bn(conv(data)))
 
         data = data.view(-1, self.final_layer_size)
-        data = self.fc1(data)
+        data = self.fc1(self.drop(data))
         return data
 
 
@@ -132,6 +141,7 @@ if __name__ == '__main__':
     parser.add_argument('--channels2', type=int, default=12)
     parser.add_argument('--channels3', type=int, default=24)
     parser.add_argument('--channels4', type=int, default=24)
+    parser.add_argument('--dropout', type=float, default=.4)
     parser.add_argument('--nowandb', action='store_true')
 
     args = parser.parse_args()
@@ -153,44 +163,47 @@ if __name__ == '__main__':
     else:
         device = torch.device('cpu')
 
-    dataset_root = '../../../leafsnap-dataset-30subset'
+    dataset_root = os.path.expanduser('~/nlesc/DIANNA/datasets/leafsnap/leafsnap-dataset-30subset')
 
     transform = transforms.Compose([transforms.Resize(config.img_size),
                                     transforms.CenterCrop(config.img_size),
                                     transforms.ToTensor()])
-    images_root = os.path.join(dataset_root, 'dataset/images_to_use_bmp')  # loading bmp images is about twice as fast as jpg
-    dataset = datasets.ImageFolder(images_root, transform=transform)
 
-    val_frac = .1
-    test_frac = .1
+    train_data = datasets.ImageFolder(os.path.join(dataset_root, 'dataset/split/train'), transform=transform, is_valid_file=valid_file)
+    val_data = datasets.ImageFolder(os.path.join(dataset_root, 'dataset/split/validation'), transform=transform, is_valid_file=valid_file)
 
-    num_samples = len(dataset)
-    num_classes = len(dataset.classes)
+    num_classes = len(train_data.classes)
 
-    val_samples = int(val_frac * num_samples)
-    test_samples = int(test_frac * num_samples)
-    train_samples = num_samples - val_samples - test_samples
-
-    train_data, val_data, test_data = torch.utils.data.random_split(dataset, [train_samples, val_samples, test_samples], generator=torch.Generator().manual_seed(42))
-
-    workers = 12
-
+    workers = min(12, os.cpu_count() - 1)
     train_dataloader = torch.utils.data.DataLoader(train_data, batch_size=config.batch_size, shuffle=True, num_workers=workers, pin_memory=True)
     val_dataloader = torch.utils.data.DataLoader(val_data, batch_size=config.batch_size, shuffle=True, num_workers=workers, pin_memory=True)
-    # don't need the test data in a wandb sweep
-    # test_dataloader = torch.utils.data.DataLoader(test_data, batch_size=config.batch_size, shuffle=True, num_workers=workers, pin_memory=True)
 
     channels = [config.channels1, config.channels2, config.channels3, config.channels4]
-    model = Network(config.img_size, num_classes, config.kernel_size, config.pooling, channels).to(device)
+    model = Network(config.img_size, num_classes, config.kernel_size, config.pooling, channels, config.dropout).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
     loss_func = nn.CrossEntropyLoss().to(device)
 
+    best_val_loss = np.inf
+    best_val_acc = None
+
     for epoch in range(config.epochs):
         # run training loop
         train_loss, train_acc = train(model, train_dataloader, optimizer, loss_func)
-        # evalute on validation data, with same model settings as during training (i.e. including dropout)
-        val_loss, val_acc = evaluate(model, val_dataloader, loss_func, train_mode=True)
+        val_loss, val_acc = evaluate(model, val_dataloader, loss_func)
 
         wandb.log({'train_epoch_loss': train_loss, 'train_epoch_acc': train_acc})
         wandb.log({'val_epoch_loss': val_loss, 'val_epoch_acc': val_acc})
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_val_acc = val_acc
+            # ensure to store the model in eval mode
+            model.eval()
+            if not args.nowandb:
+                model_name = f'models/leafsnap_model_{wandb.run.name.replace("-", "_")}.pytorch'
+            else:
+                model_name = 'models/leafsnap_model_nowandb.pytorch'
+            torch.save(model, model_name)
+
+    wandb.log({'best_val_loss': best_val_loss, 'best_val_acc': best_val_acc})
