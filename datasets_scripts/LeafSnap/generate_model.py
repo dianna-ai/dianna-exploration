@@ -53,12 +53,11 @@ class Network(nn.Module):
         for i in range(self.num):
             conv = self.conv_layers[i]
             bn = self.bn_layers[i]
-            # apply pooling, but not in last step
+            data = F.relu(bn(conv(data)))
+            # apply pooling except in the last step
             if i < self.num - 1:
                 pool = self.pool_layers[i]
-                data = pool(F.relu(bn(conv(data))))
-            else:
-                data = F.relu(bn(conv(data)))
+                data = pool(data)
 
         data = data.view(-1, self.final_layer_size)
         data = self.fc1(self.drop(data))
