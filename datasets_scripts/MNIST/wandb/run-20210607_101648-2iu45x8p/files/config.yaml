@@ -1,0 +1,44 @@
+wandb_version: 1
+
+_wandb:
+  desc: null
+  value:
+    cli_version: 0.10.30
+    framework: torch
+    is_jupyter_run: true
+    is_kaggle_kernel: false
+    python_version: 3.8.5
+    t:
+      1:
+      - 1
+      4: 3.8.5
+      5: 0.10.30
+      8:
+      - 1
+      - 5
+architecture:
+  desc: null
+  value: CNN
+batch_size:
+  desc: null
+  value: 64
+classes:
+  desc: null
+  value: 10
+dataset:
+  desc: null
+  value: MNIST
+dropout:
+  desc: null
+  value: 0.5
+epoch:
+  desc: null
+  value: 10
+kernels:
+  desc: null
+  value:
+  - 16
+  - 32
+learning_rate:
+  desc: null
+  value: 0.001
