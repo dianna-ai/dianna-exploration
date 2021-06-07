@@ -243,8 +243,9 @@ if __name__ == '__main__':
     val_data = MovieReviewDataset(os.path.join(data_path, 'validation.tsv'), tokenizer, vocab)
 
     batch_size = config.batch_size
-    train_data_iterator = DataLoader(train_data, batch_size=batch_size, shuffle=True, collate_fn=collate_func)
-    val_data_iterator = DataLoader(val_data, batch_size=batch_size, shuffle=True, collate_fn=collate_func)
+    nworker = min(12, os.cpu_count() - 1)
+    train_data_iterator = DataLoader(train_data, batch_size=batch_size, shuffle=True, collate_fn=collate_func, num_workers=nworker, pin_memory=True)
+    val_data_iterator = DataLoader(val_data, batch_size=batch_size, shuffle=True, collate_fn=collate_func, num_workers=nworker, pin_memory=True)
 
     # initialize model
     output_dim = config.output_dim
