@@ -1,0 +1,3 @@
+## Geometric shapes dataset generation
+
+The geometric shapes dataset is a custom dataset created specifically for DIANNA. The [generate_geometric_shapes.ipynb](generate_geometric_shapes.ipynb) notebook handles the generation of this dataset. It creates a user-specified amount of circles and triangles, stored as 64x64 pixel grayscale images in an `shapes.npz` file. The circles have label 0, while the triangle have label 1.
