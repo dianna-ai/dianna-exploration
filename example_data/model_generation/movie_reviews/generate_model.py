@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import os
+import sys
 import pandas as pd
 import numpy as np
 import tqdm
@@ -113,7 +114,7 @@ def train(model, train_data, optimizer, loss_func):
     epoch_acc = 0
     model.train()
 
-    for batch in tqdm.tqdm(train_data):
+    for batch in tqdm.tqdm(train_data, file=sys.stdout):
         input_data, label = batch
         input_data = input_data.to(device)
         label = label.to(device)
