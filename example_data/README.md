@@ -3,3 +3,4 @@ Each subfolder of this folder contains the notebooks related to a specific step 
 
 - [`dataset_preparation`](dataset_preparation/README.md)
 - [`model_generation`](model_generation/README.md)
+- [`xai_method_study`](xai_method_study/README.md)
