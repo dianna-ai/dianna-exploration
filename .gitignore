@@ -9,6 +9,11 @@ wandb/
 # C extensions
 *.so
 
+# models and checkpoints
+*.onnx
+*.pt
+*.pytorch
+
 # Distribution / packaging
 .Python
 build/
