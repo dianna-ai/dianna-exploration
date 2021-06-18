@@ -1,6 +1,6 @@
 ## Leafsnap model generation
 
-This scripts in this folder show how to generate a convolutional neural network with PyTorch to predict the species from the picture of a leaf in the LeafSnap dataset.
+Thе scripts in this folder show how to generate a convolutional neural network with PyTorch to predict the species from the picture of a leaf in the LeafSnap dataset.
 
 The notebooks in this folder are organized as follows:
 
