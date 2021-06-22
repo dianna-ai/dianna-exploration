@@ -5,7 +5,7 @@ The original LeafSnap dataset has been created to facilite the automatic classif
     "Lab" images, consisting of high-quality images taken of pressed leaves, from the Smithsonian collection.
     "Field" images, consisting of "typical" images taken by mobile devices (iPhones mostly) in outdoor environments.
     
-For the purpose of DIANNA a subset of 30 species has been selected, the LeafSNnp30 dataset. The 30 most populous in the number of images per species have been chosen resulting in 7395 images divided in 5917 training, 739 validation samples and 739 test samples.
+For the purpose of DIANNA a subset of 30 species has been selected, the LeafSnap30 dataset. The 30 most populous in the number of images per species have been chosen resulting in 7395 images divided in 5917 training, 739 validation samples and 739 test samples.
 
 This folder contains 2 notebooks: Data_exploration and Image_cropping.
 - [Data_exploration](https://github.com/dianna-ai/dianna/blob/main/example_data/dataset_preparation/LeafSnap/Data_exploration.ipynb)
