@@ -14,6 +14,9 @@ wandb/
 *.pt
 *.pytorch
 
+# cached files for wandb
+wandb/
+
 # Distribution / packaging
 .Python
 build/
