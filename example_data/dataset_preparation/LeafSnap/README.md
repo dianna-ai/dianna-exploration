@@ -16,3 +16,5 @@ This notebook is used to explore the original dataset and find out the most polp
 - [Image_cropping](Image_cropping.ipynb)
 The purpose of this notebook is the croping of the lab images of some species in the LeafSnap30 dataset.
 
+- [Train_test_split.ipynb](Train_test_split.ipynb)
+The purpose of this notebook is to split the data in a train, test, and validation set. This is done by creating a new folder with symbolic links to the original images.
