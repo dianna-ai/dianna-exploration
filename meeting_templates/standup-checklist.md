@@ -5,13 +5,13 @@ Backup: Elena
 
 We aim at finishing the stand up in 25 mins. Longer discussions should be held in another meeting outside the standup.
 
-## Chair reminds the team of the [goal of the sprint](https://github.com/dianna-ai/dianna-exploration/projects)
+## Chair reminds the team of the [goal of the sprint](https://github.com/dianna-ai/dianna/projects)
 
 ## Chair asks the product owner (if there is one otherwise chair will):
 
 1. What currently needs to be done in order to reach the goal of the sprint?
 
-## Chair asks each individual (Elena, Leon, Christiaan, Yang, Patrick, others?):
+## Chair asks each individual (Leon, Matthieu, Yang, Patrick, Elena, Christiaan, others?):
 
 1. Is there interesting progress for the rest of the team to know?
 1. How much time can you spend until the next stand up?
@@ -21,8 +21,8 @@ We aim at finishing the stand up in 25 mins. Longer discussions should be held i
 ## Collectively
 
 1. Discuss:
-   1. [Issues with "standup" labeled](https://github.com/dianna-ai/dianna-exploration/issues?q=is%3Aissue+is%3Aopen+label%3Astandup)
-   1. [pull requests](https://github.com/dianna-ai/dianna-exploration/pulls)
+   1. [Issues with "standup" labeled](https://github.com/dianna-ai/dianna/issues?q=is%3Aissue+is%3Aopen+label%3Astandup)
+   1. [pull requests dianna](https://github.com/dianna-ai/dianna/pulls); [pull requests dianna-exploration](https://github.com/dianna-ai/dianna-exploration/pulls)
    1. Does anyone want to do pair programming? Make an appointment.
 1. Any other business, e.g.
    - Issues unrelated to the sprint
