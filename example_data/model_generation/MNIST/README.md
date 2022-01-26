@@ -6,5 +6,5 @@ The notebooks in this folder are organized as follows:
 
 In this notebook we train models in pytorch for binary MNIST dataset.
 
-- [generate_model_binary.ipynb](generate_model_binary.py) defines a neural network and trains it on the first two classes of MNIST.
-- [generate_model_all.py](generate_model_all.py) defines a neural network and trains it on all classes of MNIST.
+- [generate_model_binary.ipynb](generate_model_binary.ipynb) defines a neural network and trains it on the first two classes of MNIST.
+- [generate_model_all.ipynb](generate_model_all.py) defines a neural network and trains it on all classes of MNIST.
