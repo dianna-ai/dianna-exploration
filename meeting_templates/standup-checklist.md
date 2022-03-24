@@ -11,7 +11,7 @@ We aim at finishing the stand up in 25 mins. Longer discussions should be held i
 
 1. What currently needs to be done in order to reach the goal of the sprint?
 
-## Chair asks each individual (Matthieu, Elena, Yang, Patrick, Leon, Christiaan, Giulia, others?):
+## Chair asks each individual (Patrick, Christiaan, Giulia, Matthieu, Elena, others?):
 
 1. Is there interesting progress for the rest of the team to know?
 1. How much time can you spend until the next stand up?
