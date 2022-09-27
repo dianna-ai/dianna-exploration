@@ -5,7 +5,7 @@ Backup: Elena
 
 We aim at finishing the stand up in 25 mins. Longer discussions should be held in another meeting outside the standup.
 
-## Chair reminds the team of the [goal of the sprint](https://github.com/dianna-ai/dianna/projects)
+## Chair reminds the team of the [goal of the sprint](https://github.com/dianna-ai/dianna/projects?type=classic)
 
 ## Chair asks the product owner (if there is one otherwise chair will):
 
