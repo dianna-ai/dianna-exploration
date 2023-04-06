@@ -10,7 +10,7 @@ wandb/
 *.so
 
 # models and checkpoints
-*.onnx
+#*.onnx
 *.pt
 *.pytorch
 
