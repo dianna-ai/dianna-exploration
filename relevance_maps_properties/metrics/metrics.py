@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 class Incremental_deletion():
     '''Implemenation for the incremental deletion method. Similar to the evaluation 
-    inspired by the RISE paper.
+    inspired by the RISE paper: https://arxiv.org/pdf/1806.07421.pdf.
 
     NOTE: 
         - The expected input and ouput of the models varies strongly per implementation. 
@@ -35,7 +35,8 @@ class Incremental_deletion():
     
     def evaluate(self, input_img: NDArray, salience_map: NDArray,
                  batch_size: Optional[int] = None,
-                 impute_method: Union[NDArray, float, str] = 'channel_mean', **model_kwargs) -> NDArray:
+                 impute_method: Union[NDArray, float, str] = 'channel_mean', 
+                 **model_kwargs) -> NDArray:
         '''Evaluate a given input image using the incremental deletion. Handles 
         both models that accept only batched input and single instances. 
 
@@ -169,7 +170,7 @@ class Incremental_deletion():
         plt.xlim(0, 1.)
         plt.ylim(0, 1.05)
         plt.fill_between(x, 0, scores, alpha=.4)
-        plt.annotate(xy=(.5, .5), text=text, **kwargs)
+        plt.annotate(xy=(.5, .5), va='center', ha='center', text=text, **kwargs)
         plt.title('Model score after removing fraction of pixels', **kwargs)
         plt.xlabel('Fraction of removed pixels', **kwargs)
         plt.ylabel('Model score', **kwargs)
@@ -180,6 +181,10 @@ class Incremental_deletion():
             plt.close()
         else:
             plt.show()
+
+
+def single_deletion():
+    pass
 
 
 def fidelity_check(model: Callable, salience_map: NDArray, x: NDArray):
