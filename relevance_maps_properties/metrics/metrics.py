@@ -1,13 +1,17 @@
+import os
+
 import numpy as np
 
 from typing import Callable, Optional, Union
-from nptyping import NDArray
+from numpy.typing import NDArray
 from dianna import utils
 from tqdm import tqdm
-from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.metrics import auc
 from scipy.stats import mode
+from copy import copy
+from torchtext.vocab import Vectors
 
+import seaborn as sns
 import matplotlib.pyplot as plt
 
 np.random.seed(0)
@@ -137,7 +141,7 @@ class Incremental_deletion():
         '''
         assert input_img.ndim > 1 and input_img.ndim < 4 # Assert that input is image
 
-        if type(impute_method) is str: 
+        if isinstance(impute_method, str): 
             if impute_method == 'channel_mean':
                 return np.mean(input_img, axis=(0,1))
             elif impute_method == 'full_mean':
@@ -146,38 +150,17 @@ class Incremental_deletion():
                 return np.median(input_img, axis=(0,1))
             elif impute_method == 'full_median':
                 return float(np.median(input_img, axis=None))
-            elif impute_method == 'mode':
-                return np.m
+            elif impute_method == 'full_mode':
+                return mode(input_img, axis=None)
             else:
                 raise ValueError( f"Given method {impute_method} is not supported. Please "
                                     "choose from 'channel_mean', 'full_mean',"
-                                    "'channel_median' or 'full_median.")
-        elif type(impute_method) is NDArray: 
+                                    "'channel_median', 'full_median or full_mode.")
+        elif isinstance(impute_method, NDArray): 
             if not(impute_method.shape[-1] == 3):
                 raise ValueError(f"Shape mismatch for given impute_method value {impute_method}."
                                   "Shape must have dimension (..., 3)")
         return impute_method
-    
-    # def visualize_examples(self,
-    #                        salience_map: NDArray,
-    #                        input_img: NDArray,
-    #                        n_examples: int = 5,
-    #                        impute_method: Union[NDArray, float, str] = 'channel_mean',
-    #                        save_to: Optional[str] = None, 
-    #                        **kwargs) -> None:
-    #     imgs, n_removed = np.empty(n_examples)
-
-    #     eval_img = np.copy(input_img)
-    #     for k in range(n_examples):
-    #         for i, j in self._get_salient_order(salience_map):
-    #             eval_img[i, j, ...] = impute_value
-
-    #         score = np.max(self.model(z[None, ...]), axis=0)[gold_lbl]
-    #         preds.append(pred)
-    #         imgs.append(to_img(z))
-    #         removed.append(k)
-
-    #     return imgs, preds, removed
 
     @staticmethod
     def visualize(scores: NDArray, save_to: Optional[str] = None, **kwargs) -> None:
@@ -202,26 +185,161 @@ class Incremental_deletion():
         
         # Save or show 
         if save_to:
-            plt.savefig(save_to + '.png', dpi=200)
-            plt.close()
+            if not save_to.endswith('.png'):
+                save_to += '.png'
+            plt.save(save_to, dpi=200)
         else:
             plt.show()
 
 
 class Single_deletion():
+    '''Singly delete elements from a sentence and measure its effect on the cofidence. 
+       This method is built for textual data. 
+    '''
     def __init__(self, model: Union[Callable, str], 
                  tokenizer: Union[Callable, str], 
-                 preprocess_function: Optional[Callable] = None) -> None:
-        utils.get_function(model, preprocess_function)  
-        pass
-    
-    def evaluate(self, input_string,):
-        pass
+                 word_vectors: Union[str, os.PathLike],
+                 max_sentence_len: Optional[int], 
+                 pad_token: str = '<pad>',
+                 unk_token: str = '<unk>') -> None:
+        '''
+        Args:
+            tokenizer: the tokenizer for model inpute.
+            word_vectors: path to stored word vectors.
+            max_sentence_len: the maximum sentence size for the model
+            pad_token: the pad token in vocab
+            unk_token: the unk token in vocab
+        '''
+        self.model = utils.get_function(model, preprocess_function=None)  
+        self.tokenizer = utils.get_function(tokenizer, preprocess_function=None)
+        self.vocab = Vectors(word_vectors, cache=os.path.dirname(word_vectors))
+        self.max_sentence_len = max_sentence_len
+        self.pad_token = pad_token
+        self.unk_token = unk_token
 
-    def _get_salient_order(self, salience_map: list[tuple]) -> tuple[NDArray, NDArray]:
-        ordered = sorted(salience_map, key= lambda x: x[-1], reverse=True)
-        _, salient_order, relevance = zip(*ordered)
-        return np.array(salient_order), np.array(relevance)
+    def evaluate(self, 
+                 salience_map: list[tuple[str, str, float]],
+                 input_sentence: str, 
+                 impute_value: str = '<unk>',
+                 **model_kwargs) -> tuple[NDArray, float]:
+        ''' Evaluate a sentence on `model` using the single deletion method.
+        Takes `salience_map` and replaces each of the given saliences with
+        `impute_value`. Measures the model score on these perturbed sentences 
+        and returns the scores for the perturbed sentences and input sentence.
+
+        Args:  
+            salience_map: The words, indices and their salient scores.
+            input_sentence: Sentence to evaluate.
+            impute_value: Value to perturb the sentence with
+            model_kwargs: Keywords Arguments for `self.model`
+        Returns: 
+            Perturbed sentence scores and initial sentence score
+        '''
+        tokenized = self._preprocess_sentence(input_sentence)
+        eval_sentence = copy(tokenized)
+        _, indices, _ = self._sort_salience_map(salience_map)
+
+        # Get original sentence score and 
+        unk_score = self.model([[self.vocab.stoi[self.unk_token] for _ in range(len(eval_sentence))]]).max()
+        gold_pred = self.model([eval_sentence], **model_kwargs)
+        gold_score = gold_pred.max()
+        gold_lbl = gold_pred.argmax()
+
+        impute_value = self.vocab.stoi[impute_value]
+        scores = np.empty(len(salience_map))
+
+        for i, token_idx in enumerate(indices):
+            tmp = eval_sentence[token_idx]
+            eval_sentence[token_idx] = impute_value
+            score = self.model([eval_sentence], **model_kwargs).flatten()[gold_lbl]
+            eval_sentence[token_idx] = tmp
+            scores[i] = score
+        return scores, gold_score, unk_score 
+
+    def _sort_salience_map(self, salience_map: list[tuple[str, str, float]], sort_idx: int = 1) -> tuple:
+        ''' Sort a salience map according to the output format of dianna at 
+        index `sort_idx`.
+
+        Args: 
+            salience_map: The words, indices and their salient scores.
+            sort_idx: The index of `salience_map` to sort by
+        Returns: 
+            unpacked and sorted `salience_map`
+        '''
+        ordered = sorted(salience_map, key=lambda x: x[sort_idx])
+        words, salient_order, relevance = zip(*ordered)
+        return words, salient_order, relevance
+    
+    def _preprocess_sentence(self, input_sentence: str) -> list:
+        '''Tokenize and embed sentence. 
+            Args: 
+                input_sentence: Sentence to be preprocessed. 
+            Returns:
+                Preprocessed sentence.
+        '''
+        tokens = self.tokenizer(input_sentence)
+        if len(tokens) < self.max_sentence_len:
+            tokens += [self.pad_token] * (self.max_sentence_len - len(tokens))
+        
+        embedded = [self.vocab.stoi[token] if token in self.vocab.stoi 
+                    else self.vocab.stoi[self.unk_token] for token in tokens]
+        return embedded
+    
+    def visualize(self, salience_map: tuple[str, str, float], 
+                  scores: NDArray, 
+                  save_to: Optional[str] = None) -> None:
+        '''Visualize the computed evaluation scores and relevances for the words 
+        given in `salience_map`. 
+
+        Args: 
+            salience_map: The words, indices and their salient scores.
+            scores: Model scores as probabilities. 
+            save_to: Path to save visualization to.
+        '''
+        assert len(scores) >= len(salience_map)
+        words, indices, relevances = self._sort_salience_map(salience_map)
+
+        fig, ax1 = plt.subplots()
+
+        color = 'tab:blue'
+        ax1.set_xlabel('Word')
+        ax1.set_ylabel('Relevance', color=color)
+        ax1.bar(range(len(indices)), relevances, color=color, alpha=.9)
+        ax1.tick_params(axis='y', labelcolor=color)
+        ax1.set_xticks(range(len(indices)), words, rotation=90)
+
+        ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+        color = 'tab:orange'
+        ax2.set_ylabel('Probability Drop', color=color)  # we already handled the x-label with ax1
+        ax2.plot(range(len(indices)), scores, '--o', color=color)
+        ax2.tick_params(axis='y', labelcolor=color)
+
+        y_lims = np.array([ax.get_ylim() for ax in [ax1, ax2]])
+
+        # force 0 to appear on both axes, comment if don't need
+        y_lims[:, 0] = y_lims[:, 0].clip(None, 0)
+        y_lims[:, 1] = y_lims[:, 1].clip(0, None)
+
+        # normalize both axes
+        y_mags = (y_lims[:,1] - y_lims[:,0]).reshape(len(y_lims),1)
+        y_lims_normalized = y_lims / y_mags
+
+        # find combined range
+        y_new_lims_normalized = np.array([np.min(y_lims_normalized), np.max(y_lims_normalized)])
+
+        # denormalize combined range to get new axes
+        new_lim1, new_lim2 = y_new_lims_normalized * y_mags
+        ax1.set_ylim(new_lim1)
+        ax2.set_ylim(new_lim2)
+
+        fig.tight_layout()  # otherwise the right y-label is slightly clipped
+
+        if save_to:
+            if not save_to.endswith('.png'):
+                save_to += '.png'
+            plt.savefig(save_to, dpi=200)
+        else:
+            plt.show()     
 
 def fidelity_check(model: Callable, salience_map: NDArray, x: NDArray):
     '''
