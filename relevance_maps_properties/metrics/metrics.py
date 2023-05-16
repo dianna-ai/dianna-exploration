@@ -1,7 +1,7 @@
 import numpy as np
 
 from typing import Callable, Optional, Union
-from nptyping import NDArray
+from numpy.typing import NDArray
 from dianna import utils
 from tqdm import tqdm
 from sklearn.metrics.pairwise import cosine_similarity
@@ -9,8 +9,6 @@ from sklearn.metrics import auc
 from scipy.stats import mode
 
 import matplotlib.pyplot as plt
-
-np.random.seed(0)
 
 
 class Incremental_deletion():
