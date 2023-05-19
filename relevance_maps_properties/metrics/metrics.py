@@ -1,4 +1,5 @@
 import os
+import dianna 
 
 import numpy as np
 
@@ -9,7 +10,9 @@ from tqdm import tqdm
 from sklearn.metrics import auc
 from scipy.stats import mode
 from copy import copy
+from PIL.Image import Image
 from torchtext.vocab import Vectors
+from matplotlib.figure import Figure
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -27,7 +30,8 @@ class Incremental_deletion():
         - Current implementation only handles image data. Extending towards language has proven 
           difficult and likely needs seperate functionality.
     '''
-    def __init__(self, model: Union[Callable, str], step: int, 
+    def __init__(self, model: Union[Callable, str], 
+                 step: int, 
                  preprocess_function: Optional[Callable] = None) -> None:
         ''' 
         Args: 
@@ -163,7 +167,12 @@ class Incremental_deletion():
         return impute_method
 
     @staticmethod
-    def visualize(scores: NDArray, save_to: Optional[str] = None, **kwargs) -> None:
+    def visualize(salience_map: NDArray,
+                  image: Image,
+                  scores: NDArray,
+                  save_to: Optional[str] = None, 
+                  show_plot: bool = True,
+                  **kwargs) -> Figure:
         '''Visualize the computed scores and its AUC score. 
 
         Args: 
@@ -173,23 +182,38 @@ class Incremental_deletion():
         n_steps = scores.size
         x = np.arange(n_steps) / n_steps
         text = 'AUC: {:.3f}'.format(auc(x, scores))
+
+        fig = dianna.visualization.plot_image(salience_map, np.asarray(image), heatmap_cmap='jet', show_plot=False)
+        ax1 = fig.axes[0]
+        ax2 = fig.add_subplot((1, 0, 1, 1))
+
+        # plot deletion curve
+        ax2.plot(x, scores)
+        ax2.set_xlim(0, 1.)
+        ax2.set_ylim(0, 1.05)
+        ax2.fill_between(x, 0, scores, alpha=.4)
+        ax2.annotate(xy=(.5, .5), va='center', ha='center', text=text, **kwargs)
+        ax2.set_title('Model score after removing fraction of pixels', **kwargs)
+        ax2.set_xlabel('Fraction of removed pixels', **kwargs)
+        ax2.set_ylabel('Model score', **kwargs)
         
-        plt.plot(x, scores)
-        plt.xlim(0, 1.)
-        plt.ylim(0, 1.05)
-        plt.fill_between(x, 0, scores, alpha=.4)
-        plt.annotate(xy=(.5, .5), va='center', ha='center', text=text, **kwargs)
-        plt.title('Model score after removing fraction of pixels', **kwargs)
-        plt.xlabel('Fraction of removed pixels', **kwargs)
-        plt.ylabel('Model score', **kwargs)
-        
+        # Force same bbox height and width for axes
+        ax1_pos = ax1.get_position()
+        ax2_pos = ax2.get_position()
+        ax2_pos.y0 = ax1_pos.y0
+        ax2_pos.x1 = ax2_pos.x0 + (ax1_pos.x1 - ax1_pos.x0)
+        ax2_pos.y1 = ax2_pos.y0 + (ax1_pos.y1 - ax1_pos.y0)
+        ax2.set_position(ax2_pos)
+
         # Save or show 
-        if save_to:
+        if show_plot:
+            plt.show()
+        elif save_to:
             if not save_to.endswith('.png'):
                 save_to += '.png'
             plt.save(save_to, dpi=200)
-        else:
-            plt.show()
+
+        return fig  
 
 
 class Single_deletion():
@@ -199,21 +223,21 @@ class Single_deletion():
     def __init__(self, model: Union[Callable, str], 
                  tokenizer: Union[Callable, str], 
                  word_vectors: Union[str, os.PathLike],
-                 max_sentence_len: Optional[int], 
+                 max_filter_size: Optional[int] = 5, 
                  pad_token: str = '<pad>',
                  unk_token: str = '<unk>') -> None:
         '''
         Args:
             tokenizer: the tokenizer for model inpute.
             word_vectors: path to stored word vectors.
-            max_sentence_len: the maximum sentence size for the model
+            max_filter_size: the maximum input size for the model
             pad_token: the pad token in vocab
             unk_token: the unk token in vocab
         '''
         self.model = utils.get_function(model, preprocess_function=None)  
         self.tokenizer = utils.get_function(tokenizer, preprocess_function=None)
         self.vocab = Vectors(word_vectors, cache=os.path.dirname(word_vectors))
-        self.max_sentence_len = max_sentence_len
+        self.max_filter_size = max_filter_size
         self.pad_token = pad_token
         self.unk_token = unk_token
 
@@ -235,40 +259,27 @@ class Single_deletion():
         Returns: 
             Perturbed sentence scores and initial sentence score
         '''
+        # Tokenize setence.
         tokenized = self._preprocess_sentence(input_sentence)
         eval_sentence = copy(tokenized)
-        _, indices, _ = self._sort_salience_map(salience_map)
+        _, indices, _ = self.sort_salience_map(salience_map)
 
-        # Get original sentence score and 
-        unk_score = self.model([[self.vocab.stoi[self.unk_token] for _ in range(len(eval_sentence))]]).max()
-        gold_pred = self.model([eval_sentence], **model_kwargs)
-        gold_score = gold_pred.max()
-        gold_lbl = gold_pred.argmax()
+        # Get original sentence score.
+        init_pred = self.model([eval_sentence], **model_kwargs)
+        init_score = init_pred.max()
+        init_lbl = init_pred.argmax()
 
         impute_value = self.vocab.stoi[impute_value]
         scores = np.empty(len(salience_map))
 
         for i, token_idx in enumerate(indices):
+            # Perturb sentence and score model. 
             tmp = eval_sentence[token_idx]
             eval_sentence[token_idx] = impute_value
-            score = self.model([eval_sentence], **model_kwargs).flatten()[gold_lbl]
+            score = self.model([eval_sentence], **model_kwargs).flatten()[init_lbl]
             eval_sentence[token_idx] = tmp
             scores[i] = score
-        return scores, gold_score, unk_score 
-
-    def _sort_salience_map(self, salience_map: list[tuple[str, str, float]], sort_idx: int = 1) -> tuple:
-        ''' Sort a salience map according to the output format of dianna at 
-        index `sort_idx`.
-
-        Args: 
-            salience_map: The words, indices and their salient scores.
-            sort_idx: The index of `salience_map` to sort by
-        Returns: 
-            unpacked and sorted `salience_map`
-        '''
-        ordered = sorted(salience_map, key=lambda x: x[sort_idx])
-        words, salient_order, relevance = zip(*ordered)
-        return words, salient_order, relevance
+        return scores, init_score
     
     def _preprocess_sentence(self, input_sentence: str) -> list:
         '''Tokenize and embed sentence. 
@@ -278,8 +289,8 @@ class Single_deletion():
                 Preprocessed sentence.
         '''
         tokens = self.tokenizer(input_sentence)
-        if len(tokens) < self.max_sentence_len:
-            tokens += [self.pad_token] * (self.max_sentence_len - len(tokens))
+        if len(tokens) < self.max_filter_size:
+            tokens += [self.pad_token] * (self.max_filter_size - len(tokens))
         
         embedded = [self.vocab.stoi[token] if token in self.vocab.stoi 
                     else self.vocab.stoi[self.unk_token] for token in tokens]
@@ -297,7 +308,7 @@ class Single_deletion():
             save_to: Path to save visualization to.
         '''
         assert len(scores) >= len(salience_map)
-        words, indices, relevances = self._sort_salience_map(salience_map)
+        words, indices, relevances = self.sort_salience_map(salience_map)
 
         fig, ax1 = plt.subplots()
 
@@ -340,6 +351,28 @@ class Single_deletion():
             plt.savefig(save_to, dpi=200)
         else:
             plt.show()     
+
+    @staticmethod
+    def sort_salience_map(salience_map: list[tuple[str, str, float]], sort_idx: int = 1) -> tuple:
+        ''' Sort a salience map according to the output format of dianna at 
+        index `sort_idx`. Expect input format is [(word, word_index, salient_score)]. 
+        Additionally, the given salience map is unpacked. 
+
+        Args: 
+            salience_map: The words, indices and their salient scores.
+            sort_idx: The index of `salience_map` to sort by
+        Raises: 
+            ValueError: In case sort_idx is out of bounds
+        Returns: 
+            unpacked and sorted `salience_map`
+        '''
+        if sort_idx < 0 or not(sort_idx < len(salience_map)):
+            raise ValueError(f"sort_idx {sort_idx} out of bounds for given salience map")
+        
+        ordered = sorted(salience_map, key=lambda x: x[sort_idx])
+        words, salient_order, relevance = zip(*ordered)
+        return words, salient_order, relevance
+
 
 def fidelity_check(model: Callable, salience_map: NDArray, x: NDArray):
     '''
