@@ -1,0 +1,42 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: dianna exploration
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Elena
+    family-names: Ranguelova
+    email: E.Ranguelova@esciencecenter.nl
+    affiliation: Netherlands eScinece center
+    orcid: 'https://orcid.org/0000-0002-9834-1756'
+  - given-names: Yang
+    family-names: Liu
+    orcid: 'https://orcid.org/0000-0002-1966-8460'
+  - given-names: Christiaan
+    family-names: Meijer
+    orcid: 'https://orcid.org/0000-0002-5529-5761'
+  - given-names: Leon
+    family-names: Oostrum
+    orcid: 'https://orcid.org/0000-0001-8724-8372'
+  - given-names: Willem
+    family-names: van der Spek
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.7985775
+    description: Inital release
+repository-code: 'https://github.com/dianna-ai/dianna-exploration'
+abstract: |-
+  eXplainable AI (XAI) methods made usable by scientists
+
+  Repository for exploration work.
+keywords:
+  - Explainable AI (XAI)
+license: Apache-2.0
+commit: >-
+  https://github.com/dianna-ai/dianna-exploration/commit/54612de5efe89948bc0f0c8a91b711cc055deb71
+version: Initial
+date-released: '2023-05-30'
