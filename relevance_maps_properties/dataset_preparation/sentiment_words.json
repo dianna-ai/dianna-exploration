@@ -1,0 +1,29 @@
+{ "words": 
+  {
+    "25": ["brilliant"],
+    "24": ["amazing"],
+    "23": ["delightful"],
+    "22": ["impressive"],
+    "21": ["captivating"],
+    "20": ["refreshing"],
+    "19": ["good"],
+    "18": ["rewarding"],
+    "17": ["decent"],
+    "16": ["watchable"],
+    "15": ["educational"],
+    "14": ["OK"],
+    "13": ["fair"],
+    "12": ["average"],
+    "11": ["bearable"],
+    "10": ["imperfect"],
+    "9": ["mediocre"],
+    "8": ["poor"],
+    "7": ["grating"],
+    "6": ["unpleasant"],
+    "5": ["lame"],
+    "4": ["bad"],
+    "3": ["terrible"],
+    "2": ["dreadful"],
+    "1": ["worthless"]
+  }
+}
