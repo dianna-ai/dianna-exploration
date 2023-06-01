@@ -118,7 +118,7 @@ class Incremental_deletion():
                 partial_order = salient_order[k * self.step * batch_size: (k + 1) * self.step * batch_size]
                 batch = self._create_batch(eval_img, partial_order, impute_value, batch_size)
                 score = self.model(batch, **model_kwargs)[:, gold_lbl]
-                scores[k * batch_size:(k + 1) * batch_size] = score
+                scores[k * batch_size + 1: (k + 1) * batch_size + 1] = score
         # Handle models without batching
         else: 
             n_iters = np.prod(input_img.shape[:2]) // self.step
@@ -151,7 +151,7 @@ class Incremental_deletion():
         '''
         assert salient_order.shape[0] == batch_size * self.step
 
-        batch = np.empty(shape=(batch_size, *eval_img.shape))
+        batch = np.empty(shape=(batch_size, *eval_img.shape), dtype=eval_img.dtype)
         for k in range(batch_size):
             # Delete pixels and add to batch
             i, j = zip(*salient_order[k * self.step: (k + 1) * self.step]) 
@@ -268,8 +268,6 @@ class Incremental_deletion():
             if not save_to.endswith('.png'):
                 save_to += '.png'
             plt.save(save_to, dpi=200)
-
-        return fig  
 
         return fig  
 
