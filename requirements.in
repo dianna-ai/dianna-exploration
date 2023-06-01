@@ -1,8 +1,10 @@
 --find-links https://download.pytorch.org/whl/torch_stable.html
 
-dianna>=0.9.0
+dianna @ git+https://github.com/dianna-ai/dianna.git # Pull DIANNA from dev branch
 torch==1.9.0+cpu
 captum>=0.4.0
+onnx2keras>=0.0.24
+quantus>=0.4.0
 seaborn>=0.12.2
 spacy>=3.5.2
 torchvision==0.10.0
