@@ -265,9 +265,6 @@ class Incremental_deletion():
         if show_plot:
             plt.show()
         elif save_to:
-        if show_plot:
-            plt.show()
-        elif save_to:
             if not save_to.endswith('.png'):
                 save_to += '.png'
             plt.save(save_to, dpi=200)
@@ -284,7 +281,6 @@ class Single_deletion():
     def __init__(self, model: Union[Callable, str], 
                  tokenizer: Union[Callable, str], 
                  word_vectors: Union[str, os.PathLike],
-                 max_filter_size: Optional[int] = 5, 
                  max_filter_size: Optional[int] = 5, 
                  pad_token: str = '<pad>',
                  unk_token: str = '<unk>') -> None:
