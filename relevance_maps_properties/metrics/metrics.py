@@ -1,8 +1,8 @@
 import os
 import dianna 
-import dianna 
-
 import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 from typing import Callable, Optional, Union
 from numpy.typing import NDArray
@@ -14,9 +14,7 @@ from copy import copy
 from PIL.Image import Image
 from torchtext.vocab import Vectors
 from matplotlib.figure import Figure
-
-import seaborn as sns
-import matplotlib.pyplot as plt
+from collections import defaultdict
 
 
 class Incremental_deletion():
@@ -47,36 +45,31 @@ class Incremental_deletion():
 
     def __call__(self, 
                  input_img: NDArray, 
-                 salience_map: NDArray, 
+                 salient_batch: NDArray, 
                  batch_size: Optional[int] = None, 
-                 n_samples: int = 1,
                  impute_method: Union[NDArray, float, str] = 'channel_mean', 
                  evaluate_random_baseline: bool = True,
                  random_seed: Optional[int] = 0,
                  **model_kwargs) -> dict:
-        results = {}
-        salient_order = self.get_salient_order(salience_map)
-        random_order = self.get_random_order(input_img.shape[:2], random_seed)
-
-        for _ in range(n_samples):
+        results = defaultdict(list)
+        
+        for salience_map in salient_batch:
+            salient_order = self.get_salient_order(salience_map)
             salient_scores = self.evaluate(input_img, salient_order, batch_size, 
                                            impute_method, **model_kwargs)
             x = np.arange(salient_scores.size) / salient_scores.size
             salient_auc = auc(x, salient_scores)
             if not 'salient_scores' in results: 
-                results['salient_scores'] = salient_scores
-                results['salient_auc'] = salient_auc
-            else: 
-                results['salient_scores'] += salient_scores
-                results['salient_auc'] += salient_auc
-        results['salient_scores'] /= n_samples
-        results['salient_auc'] /= n_samples
+                results['salient_scores'].append(salient_scores)
+                results['salient_auc'].append(salient_auc)
 
         if evaluate_random_baseline:
-            random_scores = self.evaluate(input_img, random_order, batch_size,
-                                            impute_method, **model_kwargs)
-            results['random_scores'] = random_scores
-            results['random_auc'] = auc(x, random_scores)
+            for _ in range(salient_batch.size):
+                random_order = self.get_random_order(input_img.shape[:2], random_seed)
+                random_scores = self.evaluate(input_img, random_order, batch_size,
+                                                impute_method, **model_kwargs)
+                results['random_scores'].append(random_scores)
+                results['random_auc'].append(auc(x, random_scores))
         return results
         
     def evaluate(self, 
@@ -147,7 +140,9 @@ class Incremental_deletion():
         Returns:
             Batch that is ready for model inference.
         '''
-        assert salient_order.shape[0] == batch_size * self.step
+        if (salient_order.shape[0] != batch_size * self.step):
+            raise ValueError(f'Shapes of salient_order {salient_order.shape} does not match \
+                               batch_size * step: {self.step * batch_size}')
 
         batch = np.empty(shape=(batch_size, *eval_img.shape), dtype=eval_img.dtype)
         for k in range(batch_size):
@@ -230,7 +225,7 @@ class Incremental_deletion():
             scores: The model scores to be visualized
             save_to: path to save the image to
         '''
-        fig = dianna.visualization.plot_image(salience_map, image_data, heatmap_cmap='jet', show_plot=False)
+        fig = dianna.visualization.plot_image(salience_map, image_data, show_plot=False)
         ax1 = fig.axes[0]
         ax2 = fig.add_subplot((1, 0, 1, 1))
 
