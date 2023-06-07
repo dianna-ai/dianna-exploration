@@ -1,12 +1,14 @@
 import os
 import dianna 
-import dianna 
 
 import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
 
+from dianna.utils import get_function
+from dianna.visualization import plot_image
 from typing import Callable, Optional, Union
 from numpy.typing import NDArray
-from dianna import utils
 from tqdm import tqdm
 from sklearn.metrics import auc
 from scipy.stats import mode
@@ -14,14 +16,12 @@ from copy import copy
 from PIL.Image import Image
 from torchtext.vocab import Vectors
 from matplotlib.figure import Figure
-
-import seaborn as sns
-import matplotlib.pyplot as plt
+from collections import defaultdict
 
 
 class Incremental_deletion():
     '''Implemenation for the incremental deletion method. Similar to the evaluation 
-    inspired by the RISE paper: https://arxiv.org/pdf/1806.07421.pdf.
+    inspired by the RISE paper: https://arxiv.org/uti/1806.07421.pdf.
 
     NOTE: 
         - The expected input and ouput of the models varies strongly per implementation. 
@@ -41,42 +41,42 @@ class Incremental_deletion():
             preprocess_function: function to preprocess input for model.
             
         '''
-        self.model = utils.get_function(model, preprocess_function=preprocess_function)
+        self.model = dianna.utils.get_function(model, preprocess_function=preprocess_function)
         self.n_samples = n_samples
         self.step = step 
 
     def __call__(self, 
                  input_img: NDArray, 
-                 salience_map: NDArray, 
+                 salient_batch: NDArray, 
                  batch_size: Optional[int] = None, 
-                 n_samples: int = 1,
                  impute_method: Union[NDArray, float, str] = 'channel_mean', 
                  evaluate_random_baseline: bool = True,
                  random_seed: Optional[int] = 0,
                  **model_kwargs) -> dict:
-        results = {}
-        salient_order = self.get_salient_order(salience_map)
-        random_order = self.get_random_order(input_img.shape[:2], random_seed)
+        
+        if not salient_batch.ndim == 3:
+            raise ValueError(f'Salient batch has wrong dimenions, expected ndim=3, \
+                               got ndim={salient_batch.ndim}.')
 
-        for _ in range(n_samples):
+        results = defaultdict(list)
+        
+        for salience_map in salient_batch:
+            salient_order = self.get_salient_order(salience_map)
             salient_scores = self.evaluate(input_img, salient_order, batch_size, 
                                            impute_method, **model_kwargs)
             x = np.arange(salient_scores.size) / salient_scores.size
             salient_auc = auc(x, salient_scores)
             if not 'salient_scores' in results: 
-                results['salient_scores'] = salient_scores
-                results['salient_auc'] = salient_auc
-            else: 
-                results['salient_scores'] += salient_scores
-                results['salient_auc'] += salient_auc
-        results['salient_scores'] /= n_samples
-        results['salient_auc'] /= n_samples
+                results['salient_scores'].append(salient_scores)
+                results['salient_auc'].append(salient_auc)
 
         if evaluate_random_baseline:
-            random_scores = self.evaluate(input_img, random_order, batch_size,
-                                            impute_method, **model_kwargs)
-            results['random_scores'] = random_scores
-            results['random_auc'] = auc(x, random_scores)
+            for _ in range(salient_batch.shape[0]):
+                random_order = self.get_random_order(input_img.shape[:2], random_seed)
+                random_scores = self.evaluate(input_img, random_order, batch_size,
+                                                impute_method, **model_kwargs)
+                results['random_scores'].append(random_scores)
+                results['random_auc'].append(auc(x, random_scores))
         return results
         
     def evaluate(self, 
@@ -147,7 +147,9 @@ class Incremental_deletion():
         Returns:
             Batch that is ready for model inference.
         '''
-        assert salient_order.shape[0] == batch_size * self.step
+        if (salient_order.shape[0] != batch_size * self.step):
+            raise ValueError(f'Shapes of salient_order {salient_order.shape} does not match \
+                               batch_size * step: {self.step * batch_size}')
 
         batch = np.empty(shape=(batch_size, *eval_img.shape), dtype=eval_img.dtype)
         for k in range(batch_size):
@@ -230,7 +232,7 @@ class Incremental_deletion():
             scores: The model scores to be visualized
             save_to: path to save the image to
         '''
-        fig = dianna.visualization.plot_image(salience_map, image_data, heatmap_cmap='jet', show_plot=False)
+        fig = plot_image(salience_map, image_data, show_plot=False)
         ax1 = fig.axes[0]
         ax2 = fig.add_subplot((1, 0, 1, 1))
 
@@ -289,8 +291,8 @@ class Single_deletion():
             pad_token: the pad token in vocab
             unk_token: the unk token in vocab
         '''
-        self.model = utils.get_function(model, preprocess_function=None)  
-        self.tokenizer = utils.get_function(tokenizer, preprocess_function=None)
+        self.model = get_function(model, preprocess_function=None)  
+        self.tokenizer = get_function(tokenizer, preprocess_function=None)
         self.vocab = Vectors(word_vectors, cache=os.path.dirname(word_vectors))
         self.max_filter_size = max_filter_size
         self.max_filter_size = max_filter_size
