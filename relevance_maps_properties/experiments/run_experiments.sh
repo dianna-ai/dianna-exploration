@@ -7,4 +7,5 @@ source ~/.bashrc
 module load cuda11.2/toolkit
 mamba activate embeddings
 cd ~/scratch/explainable_embedding/
-python3 ./run_experiments.py
+# Must run python file a module for the local imports to work.
+python3 -m relevance_maps_properties.Experiments.run_experiments 

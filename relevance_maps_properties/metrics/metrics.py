@@ -53,11 +53,13 @@ class Incremental_deletion():
                  evaluate_random_baseline: bool = True,
                  random_seed: Optional[int] = 0,
                  **model_kwargs) -> dict:
+        
         if not salient_batch.ndim == 3:
             raise ValueError(f'Salient batch has wrong dimenions, expected ndim=3, \
                                got ndim={salient_batch.ndim}.')
 
         results = defaultdict(list)
+        
         for salience_map in salient_batch:
             salient_order = self.get_salient_order(salience_map)
             salient_scores = self.evaluate(input_img, salient_order, batch_size, 
