@@ -120,8 +120,6 @@ class Experiments(object):
                 grid: The grid of possible hyperparameter configurations
                 save_between: Save results for every save_between images
                 model_kwargs: Kwargs to use for the model
-
-
         '''
         if output_file.suffix != '.json':
             raise ValueError('`output_file` must end with `.json`.')
@@ -219,7 +217,6 @@ def main():
 
     args = parser.parse_args()
     kwargs = vars(args)
-
     data = np.load(kwargs.pop('data'))
     for method, grid in zip(['RISE', 'LIME', 'KernelSHAP'], 
                             [RISE_config, LIME_config, SHAP_config]):
