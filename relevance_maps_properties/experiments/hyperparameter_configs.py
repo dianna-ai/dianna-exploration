@@ -13,8 +13,11 @@ def create_grid(parameters: object) -> list:
             parameters: Parameters to use in the grid
 
         Returns: All possible parameter combinations
-    '''
-    return list(ParameterGrid(parameters.__dict__))
+    ''' 
+    params = parameters.__dict__
+    params = {k: params[k] for k in params.keys() 
+              if params[k] is not None}
+    return list(ParameterGrid(params))
 
 
 class RISE_parameters(object):
@@ -96,7 +99,7 @@ class SHAP_parameters(object):
 
 RISE_config = RISE_parameters(
     p_keep = np.arange(.1, 1, .1),
-    feature_res=np.arange(1, 10, 2),
+    feature_res=np.arange(2, 11, 2),
     n_masks=np.arange(1000, 4000, 500)
 )
 
@@ -105,7 +108,7 @@ LIME_config = LIME_parameters(
     num_samples=np.arange(1000, 4000, 500),
     kernel_width=np.geomspace(0.01, 3, num=5),
     distance_metric=[None], # will extend later
-    segmentation_fn=slic,
+    segmentation_fn=[slic],
     random_state = [42]
 )
 

@@ -2,7 +2,6 @@ import os
 import dianna 
 
 import numpy as np
-import seaborn as sns
 import matplotlib.pyplot as plt
 
 from dianna.utils import get_function
@@ -66,9 +65,8 @@ class Incremental_deletion():
                                            impute_method, **model_kwargs)
             x = np.arange(salient_scores.size) / salient_scores.size
             salient_auc = auc(x, salient_scores)
-            if not 'salient_scores' in results: 
-                results['salient_scores'].append(salient_scores)
-                results['salient_auc'].append(salient_auc)
+            results['salient_scores'].append(salient_scores)
+            results['salient_auc'].append(salient_auc)
 
         if evaluate_random_baseline:
             for _ in range(salient_batch.shape[0]):

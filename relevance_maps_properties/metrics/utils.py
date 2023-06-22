@@ -29,8 +29,8 @@ def LIME_postprocess(*args, **kwargs) -> NDArray:
     DIANNA yields: list[NDArray[(Any, Any), Any]]
     Quantus expects: NDArray((Any, Any, Any), Any)
     '''
-    results = dianna.explain_image(method='LIME', *args, **kwargs)
-    return np.array(results)[0][None, ...]
+    results = dianna.explain_image(*args, method='LIME', **kwargs)
+    return np.array(results)
 
 
 def SHAP_postprocess(label, *args, **kwargs) -> NDArray:
@@ -43,6 +43,16 @@ def SHAP_postprocess(label, *args, **kwargs) -> NDArray:
     shapley_values, segments_slic = dianna.explain_image(method='KernelSHAP', *args, **kwargs)
     saliences = list(_fill_segmentation(shapley_values[label][0], segments_slic))
     return np.array(saliences)[np.newaxis, ..., np.newaxis]
+
+def RISE_postprocess(*args, **kwargs) -> NDArray:
+    '''
+    Post-process the output of DIANNA LIME in according to what Quantus expects. 
+
+    DIANNA yields: list[NDArray[(Any, Any), Any]]
+    Quantus expects: NDArray((Any, Any, Any), Any)
+    '''
+    results = dianna.explain_image(*args, method='RISE', **kwargs)
+    return np.array(results)
 
 
 def _fill_segmentation(values: NDArray, segmentation: NDArray) -> NDArray:

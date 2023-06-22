@@ -1,6 +1,6 @@
 --find-links https://download.pytorch.org/whl/torch_stable.html
 
-dianna @ git+https://github.com/dianna-ai/dianna.git # Pull DIANNA from dev branch
+dianna @ git+https://github.com/dianna-ai/dianna.git # Pull DIANNA from main branch
 torch==1.9.0+cpu
 captum>=0.4.0
 onnx2keras>=0.0.24
