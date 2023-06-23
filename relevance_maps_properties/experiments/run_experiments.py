@@ -1,25 +1,26 @@
 import argparse
-import dianna
-import quantus
 import json
 import warnings
-
-import numpy as np
-
-from numpy.typing import NDArray
-from onnx import load 
-from onnx2keras import onnx_to_keras
-from onnx.onnx_ml_pb2 import ModelProto
-from pathlib import Path
-from tqdm import tqdm
-from time import time_ns
-from typing import Callable, Union, Optional
 from functools import partialmethod
+from pathlib import Path
+from time import time_ns
+from typing import Callable, Optional, Union
+
+import dianna
+import numpy as np
+import quantus
+from numpy.typing import NDArray
+from onnx import load
+from onnx.onnx_ml_pb2 import ModelProto
+from onnx2keras import onnx_to_keras
+from tqdm import tqdm
+
+from .runners import ModelRunner
+from ..metrics import utils
+from ..metrics.metrics import Incremental_deletion
 
 # Local imports
-from .hyperparameter_configs import SHAP_config, LIME_config, RISE_config, create_grid
-from ..metrics.metrics import Incremental_deletion
-from ..metrics import utils
+from .hyperparameter_configs import LIME_config, RISE_config, SHAP_config, create_grid
 
 # Silence warnings and tqdm progress bars by default
 tqdm.__init__ = partialmethod(tqdm.__init__, disable=True)
@@ -52,8 +53,7 @@ class Experiments(object):
             TypeError: In case model type mismatched with expected tpyes
         '''
         # Model preprocessing for cross-framework evaluation
-        self.model = dianna.utils.get_function(model, 
-                                               preprocess_function=preprocess_function)
+        self.model = ModelRunner(model)
         onnx_model = load(model)
         input_names, _ = utils.get_onnx_names(onnx_model)
         self.keras_model = onnx_to_keras(onnx_model, input_names,
@@ -111,6 +111,7 @@ class Experiments(object):
                                 data: NDArray,
                                 method: str,
                                 grid: list[dict],
+                                device: str = 'cpu',
                                 batch_size=64,
                                 save_between: int = 100,
                                 model_kwargs: dict = {}
@@ -130,10 +131,11 @@ class Experiments(object):
         if data.ndim != 4:
             raise ValueError('Dimension of `data` must be 4')
 
+        if device == 'gpu':
+            self.model.__call__ = partialmethod(self.model.__call__, device=1)
         explainer = self._get_explain_func(method)
         results = self.init_JSON_format(method + 'Experiment', data.shape[0], len(grid))
         run_times = np.empty(self.n_samples)
-
         salient_batch = np.empty((self.n_samples, *data.shape[1:3]))
 
         for image_id, image_data in enumerate(tqdm(data, desc='Running Experiments', 
@@ -150,7 +152,8 @@ class Experiments(object):
 
                 for i in range(self.n_samples): 
                     start_time = time_ns()
-                    salient_batch[i] = explainer(**explainer_params)
+                    salient_batch[i] = explainer(batch_size=500,
+                                                 **explainer_params)
                     run_times[i] = time_ns() - start_time
 
                 # Compute metrics
@@ -158,10 +161,6 @@ class Experiments(object):
                                          salient_batch, 
                                          batch_size=batch_size,
                                          **model_kwargs)
-                del incr_del['salient_scores']
-                del incr_del['random_scores']
-
-
                 avg_sensitiviy  = self.avg_sensitivity(model=self.keras_model,
                                                        x_batch=image_data[np.newaxis, ...],
                                                        y_batch=label,
@@ -176,6 +175,8 @@ class Experiments(object):
                                                        explain_func_kwargs=explainer_params) 
                 
                 # Save results
+                del incr_del['salient_scores']
+                del incr_del['random_scores']
                 results['images'][image_id]['configs'][config_id]['incremental_deletion'] = incr_del
                 results['images'][image_id]['configs'][config_id]['avg_sensitivity'] = avg_sensitiviy
                 results['images'][image_id]['configs'][config_id]['max_sensitiviy'] = max_sensitivity
@@ -242,6 +243,7 @@ def main():
     parser.add_argument('--out', type=str, default='./')
     parser.add_argument('--step', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=100)
+    parser.add_argument('--device', type=str, default='cpu')
     parser.add_argument('--n_samples', type=int, default=5)
 
     args = parser.parse_args()
