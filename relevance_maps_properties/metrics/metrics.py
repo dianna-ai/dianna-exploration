@@ -56,7 +56,6 @@ class Incremental_deletion():
         if not salient_batch.ndim == 3:
             raise ValueError(f'Salient batch has wrong dimenions, expected ndim=3, \
                                got ndim={salient_batch.ndim}.')
-
         results = defaultdict(list)
         
         for salience_map in salient_batch:
@@ -65,16 +64,19 @@ class Incremental_deletion():
                                            impute_method, **model_kwargs)
             x = np.arange(salient_scores.size) / salient_scores.size
             salient_auc = auc(x, salient_scores)
-            results['salient_scores'].append(salient_scores)
             results['salient_auc'].append(salient_auc)
+            results['salient_scores'].append(salient_scores.tolist())
 
         if evaluate_random_baseline:
+            if random_seed is not None:
+                np.random.seed(random_seed)
             for _ in range(salient_batch.shape[0]):
                 random_order = self.get_random_order(input_img.shape[:2], random_seed)
                 random_scores = self.evaluate(input_img, random_order, batch_size,
                                                 impute_method, **model_kwargs)
-                results['random_scores'].append(random_scores)
-                results['random_auc'].append(auc(x, random_scores))
+                random_auc = auc(x, random_scores)
+                results['random_auc'].append(random_auc)
+                results['random_scores'].append(random_scores.tolist())
         return results
         
     def evaluate(self, 
@@ -197,20 +199,22 @@ class Incremental_deletion():
     @staticmethod
     def get_salient_order(salience_map: NDArray) -> NDArray:
         '''Return the order of relvances in terms of indices of `salience_map`
-
+           
+        NOTE: Mergesort is necessary for sorting stability, i.e. 
+                deleting pixels in proximity is desirable when neighbouring scores have
+                the same values. 
         Args: 
             salience_map: map of salient scores
         Returns:
             Indices of `salience_map` sorted by their value.
         '''
-        return np.stack(np.unravel_index(np.argsort(salience_map, axis=None), 
+        return np.stack(np.unravel_index(np.argsort(salience_map, axis=None, 
+                                                    kind='mergesort'), 
                                          salience_map.shape), axis=-1)[::-1]
     
     @staticmethod
     def get_random_order(image_shape: tuple, random_seed: Optional[int] = 0) -> NDArray:
         '''Get a random order of coordinates '''
-        if isinstance(random_seed, int): 
-            np.random.seed(random_seed)
 
         indices = np.argwhere(np.ones(image_shape)) # Hack to get all cartesian coordinates 
         np.random.shuffle(indices)

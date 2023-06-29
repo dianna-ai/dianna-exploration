@@ -1,12 +1,14 @@
 import argparse
 import json
 import warnings
+from copy import copy
 from functools import partialmethod
 from pathlib import Path
 from time import time_ns
 from typing import Callable, Optional, Union
 
 import dianna
+import matplotlib.pyplot as plt
 import numpy as np
 import quantus
 from numpy.typing import NDArray
@@ -15,16 +17,16 @@ from onnx.onnx_ml_pb2 import ModelProto
 from onnx2keras import onnx_to_keras
 from tqdm import tqdm
 
-from .runners import ModelRunner
 from ..metrics import utils
 from ..metrics.metrics import Incremental_deletion
 
 # Local imports
-from .hyperparameter_configs import LIME_config, RISE_config, SHAP_config, create_grid
+from .hyperparameter_configs import LIME_config, RISE_config, SHAP_config, ParamGrid
+from .runners import ModelRunner
 
-# Silence warnings and tqdm progress bars by default
+# Silence imported progress bars and warnings
 tqdm.__init__ = partialmethod(tqdm.__init__, disable=True)
-warnings.filterwarnings("ignore")
+warnings.simplefilter("ignore")
 
 
 class Experiments(object):
@@ -53,7 +55,7 @@ class Experiments(object):
             TypeError: In case model type mismatched with expected tpyes
         '''
         # Model preprocessing for cross-framework evaluation
-        self.model = ModelRunner(model)
+        self.model = ModelRunner(model, preprocess_function=preprocess_function)
         onnx_model = load(model)
         input_names, _ = utils.get_onnx_names(onnx_model)
         self.keras_model = onnx_to_keras(onnx_model, input_names,
@@ -71,8 +73,9 @@ class Experiments(object):
         self.max_sensitivity = quantus.MaxSensitivity(nr_samples=self.n_samples, 
                                                       **quantus_kwargs)
 
-    def init_JSON_format(self, experiment_name: str, 
-                         n_images: int, n_configs: int) -> dict:
+    @staticmethod
+    def init_JSON_format(experiment_name: str, 
+                         n_configs: int) -> dict:
         ''' Return the hierarchical structure and metadata for the experiments data. 
 
             Returns the data format that `explain_evaluate_images` expects to dump the 
@@ -80,40 +83,34 @@ class Experiments(object):
 
             Args:
                 experiment_name: Name for the experiment
-                n_images: Number of images to run the experiment on
                 n_configs: Number of hyperparameter configurations
             Returns:
                 Base dictionary representing JSON structure as output format.
         '''
         output = {'experiment_name': experiment_name,
-                  'images': [
-                             {
-                              'image_id': 0,
-                              'imag_data': [],
-                              'configs': [
-                                          {
-                                           'config_id': 0,
-                                           'config': [],
-                                           'salient_batch': [],
-                                           'incremental_deletion': {},
-                                           'avg_sensitivity': 0.,
-                                           'max_sensitivity': 0.,
-                                           'run_time': 0.,
-                                          } for _ in range(n_configs) 
-                                         ] 
-                             } for _ in range(n_images)
+                  'image_id': 0,
+                  'image_data': [],
+                  'model_scores': [],
+                  'configs': [
+                                {
+                                'config_id': 0,
+                                'config': [],
+                                'sensitivity': [],
+                                'run_time': 0.,
+                                'incremental_deletion': {},
+                                'salient_batch': [],
+                                } for _ in range(n_configs) 
                             ] 
-                 }
+                 } 
         return output
 
     def explain_evaluate_images(self,
-                                output_file: Union[str, Path],
+                                output_folder: Union[str, Path],
                                 data: NDArray,
                                 method: str,
                                 grid: list[dict],
                                 device: str = 'cpu',
                                 batch_size=64,
-                                save_between: int = 100,
                                 model_kwargs: dict = {}
                                 ) -> None:
         ''' This function will run our explainers and evaluators. 
@@ -126,15 +123,11 @@ class Experiments(object):
                 save_between: Save results for every save_between images
                 model_kwargs: Kwargs to use for the model
         '''
-        if output_file.suffix != '.json':
-            raise ValueError('`output_file` must end with `.json`.')
         if data.ndim != 4:
             raise ValueError('Dimension of `data` must be 4')
 
-        if device == 'gpu':
-            self.model.__call__ = partialmethod(self.model.__call__, device=1)
         explainer = self._get_explain_func(method)
-        results = self.init_JSON_format(method + 'Experiment', data.shape[0], len(grid))
+        results = self.init_JSON_format(method + '_Experiment', len(grid))
         run_times = np.empty(self.n_samples)
         salient_batch = np.empty((self.n_samples, *data.shape[1:3]))
 
@@ -142,18 +135,19 @@ class Experiments(object):
                                                    disable=False, position=0)):
             label = self.model(image_data[np.newaxis, ...],
                         **model_kwargs).argmax()[np.newaxis, ...]
-            for config_id, explainer_params in enumerate(tqdm(grid, desc='Trying out configurations',
+            for config_id, config in enumerate(tqdm(grid, desc='Trying out configurations',
                                                               disable=False, position=1,
                                                               leave=True)):
-                # TODO: Ensure this block happens outside this VERY expensive loop
+                
+                explainer_params = copy(config) # Prevent in-place modification of grid
                 explainer_params['labels'] = label
                 explainer_params['model_or_function'] = self.model
                 explainer_params['input_data'] = image_data
+                explainer_params['batch_size'] = batch_size
 
                 for i in range(self.n_samples): 
                     start_time = time_ns()
-                    salient_batch[i] = explainer(batch_size=500,
-                                                 **explainer_params)
+                    salient_batch[i] = explainer(**explainer_params)
                     run_times[i] = time_ns() - start_time
 
                 # Compute metrics
@@ -161,36 +155,24 @@ class Experiments(object):
                                          salient_batch, 
                                          batch_size=batch_size,
                                          **model_kwargs)
-                avg_sensitiviy  = self.avg_sensitivity(model=self.keras_model,
-                                                       x_batch=image_data[np.newaxis, ...],
-                                                       y_batch=label,
-                                                       batch_size=batch_size,
-                                                       explain_func=explainer,
-                                                       explain_func_kwargs=explainer_params)
-                max_sensitivity = self.max_sensitivity(model=self.keras_model,
-                                                       x_batch=image_data[np.newaxis, ...],
-                                                       y_batch=label,
-                                                       batch_size=batch_size,
-                                                       explain_func=explainer,
-                                                       explain_func_kwargs=explainer_params) 
-                
+                sensitivity = self.avg_sensitivity(model=self.keras_model,
+                                                    x_batch=image_data[np.newaxis, ...],
+                                                    y_batch=label,
+                                                    batch_size=batch_size,
+                                                    explain_func=explainer,
+                                                    explain_func_kwargs=explainer_params)
+                                                    
                 # Save results
-                del incr_del['salient_scores']
-                del incr_del['random_scores']
-                results['images'][image_id]['configs'][config_id]['incremental_deletion'] = incr_del
-                results['images'][image_id]['configs'][config_id]['avg_sensitivity'] = avg_sensitiviy
-                results['images'][image_id]['configs'][config_id]['max_sensitiviy'] = max_sensitivity
-                results['images'][image_id]['configs'][config_id]['run_time'] = np.median(run_times)
-                
-            # Write imbetween result to file in case of runtime failures
-            if image_id % save_between == 0:
-                print(f"Backing up at iteration {image_id}")
-                with open(output_file, 'w') as fp:
-                    json.dump(results, fp)
+                results['configs'][config_id]['config'] = grid[config_id]
+                results['configs'][config_id]['salient_batch'] = salient_batch.tolist()
+                results['configs'][config_id]['incremental_deletion'] = incr_del
+                results['configs'][config_id]['sensitivity'] = sensitivity
+                results['configs'][config_id]['run_time'] = np.median(run_times)
 
-        # Save final results. 
-        with open(output_file, 'w') as fp:
-            json.dump(results, fp)
+            # Savel results
+            output_file = Path(output_folder) / ('image_' + str(image_id) + '.json')
+            with open(output_file, 'w') as fp:
+                json.dump(results, fp, indent=4)
 
     @staticmethod
     def _get_explain_func(method: str) -> Callable:
@@ -227,7 +209,8 @@ def pool_handler():
 def load_MNIST(data: Union[str, Path]) -> NDArray:
     f_store = np.load(data)
     images = f_store['X_test'].astype(np.float32)
-    return images.reshape([-1, 28, 28, 1]) / 255
+    images = images.reshape([-1, 28, 28, 1]) / 255
+    return images[:10]
 
 
 def main():
@@ -237,28 +220,27 @@ def main():
         command-line arguments.
     '''
     parser = argparse.ArgumentParser()
-
     parser.add_argument('--model', type=str, required=True)
     parser.add_argument('--data', type=str, required=True)
+    parser.add_argument('--method', type=str, required=True)
     parser.add_argument('--out', type=str, default='./')
     parser.add_argument('--step', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--device', type=str, default='cpu')
-    parser.add_argument('--n_samples', type=int, default=5)
-
     args = parser.parse_args()
     kwargs = vars(args)
+    
+    out = Path(kwargs.pop('out'))
+    if not out.exists():
+        raise ValueError('Please specify an existing path on the --out parameter')
     model = str(Path(kwargs.pop('model')).absolute())
-    out = kwargs.pop('out')
-
     data = load_MNIST(kwargs.pop('data'))
-    for method, config in zip(['RISE', 'LIME', 'KernelSHAP'], 
-                            [RISE_config, LIME_config, SHAP_config]):
-        grid = create_grid(config)
-        out = Path(out) / (method + '.json')
-        experiments = Experiments(model, **kwargs)
-        kwargs = dianna.utils.get_kwargs_applicable_to_function(experiments.explain_evaluate_images, kwargs)
-        experiments.explain_evaluate_images(out, data, method, grid, **kwargs)
+    method = kwargs.pop('method') 
+    grid = ParamGrid(globals()[method[-4:] + '_config'].__dict__)
+
+    experiments = Experiments(model, **kwargs)
+    kwargs = dianna.utils.get_kwargs_applicable_to_function(experiments.explain_evaluate_images,  kwargs)
+    experiments.explain_evaluate_images(out, data, method, grid, **kwargs)
 
 if __name__ == '__main__':
     main()
