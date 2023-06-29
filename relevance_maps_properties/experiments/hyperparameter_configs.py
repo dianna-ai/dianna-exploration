@@ -1,22 +1,60 @@
+from collections.abc import Mapping, Sequence
 import numpy as np
 
-from typing import Optional, Iterable
-from skimage.segmentation import slic
+from typing import Mapping, Optional, Iterable, Sequence, Union
 from sklearn.model_selection import ParameterGrid
+from sklearn.linear_model import Ridge
+
+from .config_wrappers import Slic_Wrapper
 
 
-def create_grid(parameters: object) -> list:
-    ''' Convert parameter objects to a grid containing all possible parameter 
-        combinations.
+class ParamGrid(ParameterGrid):
+    '''Wrapper for ParameterGrid from sklearn.model_selection'''
+    def __init__(self, param_grid: Union[Sequence, Mapping]) -> None:
+        cleaned_grid = {}
+        for key in param_grid:
+            if param_grid[key] is None:
+                continue
+            elif isinstance(param_grid[key], (np.ndarray, np.generic)):
+                cleaned_grid[key] = param_grid[key].tolist()
+            else:
+                cleaned_grid[key] = param_grid[key]
+        super().__init__(cleaned_grid)
+    
+    def __getitem__(self, ind: int) -> dict[str, list[str, int, float]]:
+        '''Slight modifitcation of the sklearn.model_selection.ParameterGrid implementation
+           
+           Tries to get the representation of non strings, floats and ints in order 
+           to make this data serializable.'''
+        for sub_grid in self.param_grid:
+            if not sub_grid:
+                if ind == 0:
+                    return {}
+                else:
+                    ind -= 1
+                    continue
 
-        Args:
-            parameters: Parameters to use in the grid
+            # Reverse so most frequent cycling parameter comes first
+            keys, values_lists = zip(*sorted(sub_grid.items())[::-1])
+            sizes = [len(v_list) for v_list in values_lists]
+            total = np.product(sizes)
 
-        Returns: All possible parameter combinations
-    '''
-    return list(ParameterGrid(parameters.__dict__))
+            if ind >= total:
+                # Try the next grid
+                ind -= total
+            else:
+                out = {}
+                for key, v_list, n in zip(keys, values_lists, sizes):
+                    ind, offset = divmod(ind, n)
+                    val = v_list[offset]
+                    if not isinstance(val, (str, float, int)):
+                        val = str(val)
+                    out[key] = val
+                return out
 
+        raise IndexError("ParameterGrid index out of range")
 
+        
 class RISE_parameters(object):
     '''Set up hyperparameters for RISE.
     '''
@@ -95,22 +133,25 @@ class SHAP_parameters(object):
 
 
 RISE_config = RISE_parameters(
+    n_masks=np.arange(200, 2000, 400),
     p_keep = np.arange(.1, 1, .1),
-    feature_res=np.arange(1, 10, 2),
-    n_masks=np.arange(1000, 4000, 500)
+    feature_res=np.arange(3, 16, 3),
+    random_state=[42]
 )
 
 
 LIME_config = LIME_parameters(
-    num_samples=np.arange(1000, 4000, 500),
-    kernel_width=np.geomspace(0.01, 3, num=5),
-    distance_metric=[None], # will extend later
-    segmentation_fn=slic,
-    random_state = [42]
+    num_samples=np.arange(20, 200, 40),
+    kernel_width=np.geomspace(0.1, 3, num=5),
+    distance_metric=None, # will extend later
+    segmentation_fn=[Slic_Wrapper(n_segments=n) for n in range(10, 60,10)],
+    model_regressor=[Ridge(alpha=a) for a in [0, *np.geomspace(0.05, 3, num=4)]]
+    # random_state = [42]
 )
 
 
 SHAP_config = SHAP_parameters(
-    nsamples=np.arange(1000, 4000, 500),
-    l1_reg=np.geomspace(.001, 1, num=5)
+    nsamples=np.arange(20, 200, 40),
+    l1_reg=[0, *np.geomspace(0.05, 3, num=4)],
+    random_state=[42]
 )
