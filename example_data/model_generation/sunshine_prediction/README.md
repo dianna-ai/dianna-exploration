@@ -4,4 +4,4 @@ Thе scripts in this folder show how to generate a 3-layer convolutional neural 
 
 The notebooks in this folder are organized as follows:
 
-- [generate_model.ipynb](generate_model_binary.ipynb) defines a neural network and trains it on Basel weather data from the light version of the weather prediction dataset.
+- [generate_model.ipynb](generate_model.ipynb) defines a neural network and trains it on Basel weather data from the light version of the weather prediction dataset.
