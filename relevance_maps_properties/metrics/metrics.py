@@ -10,7 +10,7 @@ from typing import Callable, Optional, Union
 from numpy.typing import NDArray
 from tqdm import tqdm
 from sklearn.metrics import auc
-from scipy.stats import mode
+from scipy.stats import mode, pearsonr, spearmanr
 from copy import copy
 from PIL.Image import Image
 from torchtext.vocab import Vectors
@@ -297,9 +297,43 @@ class Single_deletion():
         self.tokenizer = get_function(tokenizer, preprocess_function=None)
         self.vocab = Vectors(word_vectors, cache=os.path.dirname(word_vectors))
         self.max_filter_size = max_filter_size
-        self.max_filter_size = max_filter_size
         self.pad_token = pad_token
         self.unk_token = unk_token
+
+    def __call__(self, 
+                 input_text: str,
+                 salient_batch: list[list[tuple[str, str, float]]],
+                 normalise: bool = False, 
+                 normalise_fn: Optional[Callable] = None, 
+                 impute_value: str = '<unk>',
+                 p_thresh: float = .05
+                 ): 
+        
+        results = defaultdict(list)
+        for salience_map in salient_batch:
+            scores, init_score = self.evaluate(salience_map, input_text, 
+                                               impute_value = impute_value)
+            scores = init_score - scores
+            _, _, relevances = self.sort_salience_map(salience_map)
+            if normalise:
+                relevances = normalise_fn(np.array(relevances))
+
+            pearson = pearsonr(relevances, scores, alternative='greater')
+            spearman = spearmanr(relevances, scores, alternative='greater')
+            if pearson[1] > p_thresh: 
+                continue
+            if spearman[1] > p_thresh:
+                continue
+            results['scores'].append(scores.tolist())
+            results['pearson'].append(pearson[0])
+            results['spearman'].append(spearman[0])
+        
+        if not results['scores']:
+            raise RuntimeError('''Couldn\'t find reliable correlation estimates in given 
+                               batch of explanations. This is likely due to a poor choice 
+                               of hyperparameters. Please recompute the explanations.''')
+        results['init_score'] = float(init_score)
+        return results
 
     def evaluate(self, 
                  salience_map: list[tuple[str, str, float]],
@@ -320,34 +354,25 @@ class Single_deletion():
             Perturbed sentence scores and initial sentence score
         '''
         # Tokenize setence.
-        # Tokenize setence.
         tokenized = self._preprocess_sentence(input_sentence)
         eval_sentence = copy(tokenized)
         _, indices, _ = self.sort_salience_map(salience_map)
-        _, indices, _ = self.sort_salience_map(salience_map)
 
         # Get original sentence score.
         init_pred = self.model([eval_sentence], **model_kwargs)
         init_score = init_pred.max()
         init_lbl = init_pred.argmax()
-        # Get original sentence score.
-        init_pred = self.model([eval_sentence], **model_kwargs)
-        init_score = init_pred.max()
-        init_lbl = init_pred.argmax()
-
+        
         impute_value = self.vocab.stoi[impute_value]
         scores = np.empty(len(salience_map))
 
         for i, token_idx in enumerate(indices):
             # Perturb sentence and score model. 
-            # Perturb sentence and score model. 
             tmp = eval_sentence[token_idx]
             eval_sentence[token_idx] = impute_value
             score = self.model([eval_sentence], **model_kwargs).flatten()[init_lbl]
-            score = self.model([eval_sentence], **model_kwargs).flatten()[init_lbl]
             eval_sentence[token_idx] = tmp
             scores[i] = score
-        return scores, init_score
         return scores, init_score
     
     def _preprocess_sentence(self, input_sentence: str) -> list:
@@ -358,8 +383,6 @@ class Single_deletion():
                 Preprocessed sentence.
         '''
         tokens = self.tokenizer(input_sentence)
-        if len(tokens) < self.max_filter_size:
-            tokens += [self.pad_token] * (self.max_filter_size - len(tokens))
         if len(tokens) < self.max_filter_size:
             tokens += [self.pad_token] * (self.max_filter_size - len(tokens))
         
@@ -385,7 +408,6 @@ class Single_deletion():
             text_kwargs: Kwargs for the text-based methods of matplotlib.
         '''
         assert len(scores) >= len(salience_map)
-        words, indices, relevances = self.sort_salience_map(salience_map)
         words, indices, relevances = self.sort_salience_map(salience_map)
 
         fig, ax1 = plt.subplots()

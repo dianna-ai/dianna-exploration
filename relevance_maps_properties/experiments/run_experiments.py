@@ -7,22 +7,29 @@ from pathlib import Path
 from time import time_ns
 from typing import Callable, Optional, Union
 
+from sklearn.linear_model import LinearRegression, Ridge
+
 import dianna
-import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import quantus
+import torch
+from dianna.utils.tokenizers import SpacyTokenizer
 from numpy.typing import NDArray
 from onnx import load
 from onnx.onnx_ml_pb2 import ModelProto
 from onnx2keras import onnx_to_keras
+from quantus import normalise_func
 from tqdm import tqdm
-
-from ..metrics import utils
-from ..metrics.metrics import Incremental_deletion
+from torchtext.vocab import Vectors
 
 # Local imports
-from .hyperparameter_configs import LIME_config, RISE_config, SHAP_config, ParamGrid
+from ..metrics import utils
+from ..metrics.metrics import Incremental_deletion, Single_deletion
+from ..metrics.sensitivity import Sensitivity
+from .hyperparameter_configs import LIME_config, RISE_config, SHAP_config, ParamGrid  # noqa: F401
 from .runners import ModelRunner
+from .models import Model, Predictor  # noqa: F401
 
 # Silence imported progress bars and warnings
 tqdm.__init__ = partialmethod(tqdm.__init__, disable=True)
@@ -55,11 +62,15 @@ class Experiments(object):
             TypeError: In case model type mismatched with expected tpyes
         '''
         # Model preprocessing for cross-framework evaluation
+        self.str_model = model
         self.model = ModelRunner(model, preprocess_function=preprocess_function)
         onnx_model = load(model)
         input_names, _ = utils.get_onnx_names(onnx_model)
-        self.keras_model = onnx_to_keras(onnx_model, input_names,
+        try:
+            self.keras_model = onnx_to_keras(onnx_model, input_names,
                                          name_policy='renumerate', verbose=False)
+        except Exception as e:
+            raise Exception(e)
 
         self.n_samples = n_samples
         id_kwargs = dianna.utils.get_kwargs_applicable_to_function(
@@ -126,7 +137,7 @@ class Experiments(object):
         if data.ndim != 4:
             raise ValueError('Dimension of `data` must be 4')
 
-        explainer = self._get_explain_func(method)
+        explainer = self.get_explain_func(method)
         results = self.init_JSON_format(method + '_Experiment', len(grid))
         run_times = np.empty(self.n_samples)
         salient_batch = np.empty((self.n_samples, *data.shape[1:3]))
@@ -141,7 +152,7 @@ class Experiments(object):
                 
                 explainer_params = copy(config) # Prevent in-place modification of grid
                 explainer_params['labels'] = label
-                explainer_params['model_or_function'] = self.model
+                explainer_params['model_or_function'] = self.str_model
                 explainer_params['input_data'] = image_data
                 explainer_params['batch_size'] = batch_size
 
@@ -153,6 +164,7 @@ class Experiments(object):
                 # Compute metrics
                 incr_del = self.incr_del(image_data, 
                                          salient_batch, 
+                                         impute_method='full_mode',
                                          batch_size=batch_size,
                                          **model_kwargs)
                 sensitivity = self.avg_sensitivity(model=self.keras_model,
@@ -170,12 +182,11 @@ class Experiments(object):
                 results['configs'][config_id]['run_time'] = np.median(run_times)
 
             # Savel results
-            output_file = Path(output_folder) / ('image_' + str(image_id) + '.json')
+            output_file = Path(output_folder) / ('image_' + str(image_id + 87) + '.json')
             with open(output_file, 'w') as fp:
                 json.dump(results, fp, indent=4)
 
-    @staticmethod
-    def _get_explain_func(method: str) -> Callable:
+    def get_explain_func(self, method: str) -> Callable:
         '''Helper func to return appropriate explain function for method.
         
            Args:
@@ -197,20 +208,95 @@ class Experiments(object):
                                 KernelShap, RISE and LIME.''')
 
 
-def pool_handler():
-    '''Extend support for distributed computing
+class TextExperiments(Experiments):
+    def __init__(self, 
+                 model: Predictor,
+                 torch_model: torch.nn.Module,
+                 tokenizer: Union[Callable, str, None],
+                 word_vectors: Union[str, Path, None],
+                 n_samples: int = 25,
+                 preprocess_function: Optional[Callable] = None,
+                 **kwargs):
+        self.model = model
+        self.torch_model = torch_model
+        self.tokenizer = tokenizer
+        self.n_samples = n_samples
+        self.vocab = Vectors(word_vectors)
+        self.single_del = Single_deletion(model, tokenizer.tokenize, word_vectors)
+        self.sensitivity = Sensitivity(utils.Embedder(self.vocab), 
+                                       nr_samples=self.n_samples,
+                                       perturb_func=utils.Synonym_replacer(),
+                                       normalise=True,
+                                       normalise_func=normalise_func.normalise_by_average_second_moment_estimate)
 
-       This function should generate several processes such
-       that our code can be run in a distributed manner.
-    '''
-    raise NotImplementedError()
+    def explain_evaluate_text(self,
+                              output_folder: Union[str, Path],
+                              data: NDArray,
+                              method: str,
+                              grid: list[dict],
+                              batch_size=64,
+                              model_kwargs: dict = {}):
+        explainer = self.get_explain_func(method)
+        results = self.init_JSON_format(method + '_Experiment', len(grid))
+
+        for text_id, text_data in enumerate(tqdm(data, desc='Running Experiments', 
+                                                   disable=False, position=0)):
+            label = self.model([text_data], **model_kwargs).argmax()[np.newaxis, ...]
+            tokenized = np.array(self.tokenizer.tokenize(text_data))
+            for config_id, config in enumerate(tqdm(grid, desc='Trying out configurations',
+                                                              disable=False, position=1,
+                                                              leave=True)):
+                salient_batch = []
+                explainer_params = copy(config) # Prevent in-place modification of grid
+                explainer_params['labels'] = label
+                explainer_params['model_or_function'] = self.model
+                explainer_params['input_text'] = text_data
+                explainer_params['tokenizer'] = self.tokenizer
+                explainer_params['batch_size'] = batch_size
+                explainer_params['modality'] = 'text' 
+
+                start_time = time_ns()
+                for _ in range(self.n_samples):
+                    salience_map = dianna.explain_text(method=method, **explainer_params)[0]
+                    for i, saliency in enumerate(salience_map):
+                        salience_map[i] = (*saliency[:-1], float(saliency[-1]))
+                    salient_batch.append(salience_map)
+                run_time = time_ns() - start_time
+
+                # Compute metrics
+                single_del = self.single_del(text_data,
+                                             salient_batch, 
+                                             normalise=True, 
+                                             normalise_fn=normalise_func.normalise_by_average_second_moment_estimate,
+                                             **model_kwargs)
+                sensitivity = self.sensitivity(model=self.torch_model,
+                                               x_batch=tokenized[np.newaxis, ...],
+                                               y_batch=label,
+                                               batch_size=batch_size,
+                                               explain_func=explainer,
+                                               explain_func_kwargs=explainer_params)
+                                                
+                # Save results
+                results['configs'][config_id]['config'] = grid[config_id]
+                results['configs'][config_id]['salient_batch'] = salient_batch
+                results['configs'][config_id]['incremental_deletion'] = single_del
+                results['configs'][config_id]['sensitivity'] = sensitivity
+                results['configs'][config_id]['run_time'] = run_time
+
+            # Savel results
+            output_file = Path(output_folder) / ('review_' + str(text_id) + '.json')
+            with open(output_file, 'w') as fp:
+                json.dump(results, fp, indent=4)
 
 
 def load_MNIST(data: Union[str, Path]) -> NDArray:
-    f_store = np.load(data)
-    images = f_store['X_test'].astype(np.float32)
+    images = np.load(data)
     images = images.reshape([-1, 28, 28, 1]) / 255
-    return images[:10]
+    return images.astype(np.float32)[87:]
+
+
+def load_movie_review(data: Union[str, Path], tokenizer: Callable) -> NDArray:
+    return np.array(pd.read_csv(data, delimiter='\t')['sentence'])[95:]
 
 
 def main():
@@ -220,27 +306,40 @@ def main():
         command-line arguments.
     '''
     parser = argparse.ArgumentParser()
+    parser.add_argument('--modality', type=str, required=True)
     parser.add_argument('--model', type=str, required=True)
     parser.add_argument('--data', type=str, required=True)
     parser.add_argument('--method', type=str, required=True)
+    parser.add_argument('--word_vectors', type=str)
     parser.add_argument('--out', type=str, default='./')
-    parser.add_argument('--step', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=100)
+    parser.add_argument('--step', type=int, default=2)
     parser.add_argument('--device', type=str, default='cpu')
     args = parser.parse_args()
     kwargs = vars(args)
     
+    modality = kwargs.pop('modality')
     out = Path(kwargs.pop('out'))
     if not out.exists():
         raise ValueError('Please specify an existing path on the --out parameter')
     model = str(Path(kwargs.pop('model')).absolute())
-    data = load_MNIST(kwargs.pop('data'))
     method = kwargs.pop('method') 
     grid = ParamGrid(globals()[method[-4:] + '_config'].__dict__)
 
-    experiments = Experiments(model, **kwargs)
-    kwargs = dianna.utils.get_kwargs_applicable_to_function(experiments.explain_evaluate_images,  kwargs)
-    experiments.explain_evaluate_images(out, data, method, grid, **kwargs)
+    if modality == 'text':
+        if not kwargs['word_vectors']:
+            raise ValueError('Please provide `--word_vectors` command-line arg for `--modality text.`')
+        kwargs['tokenizer'] = SpacyTokenizer()
+
+    elif modality =='image':
+        data = load_MNIST(kwargs.pop('data'))
+        experiments = Experiments(model, **kwargs)
+        kwargs = dianna.utils.get_kwargs_applicable_to_function(experiments.explain_evaluate_images,  kwargs)
+        experiments.explain_evaluate_images(out, data, method, grid, **kwargs)
+    
+    else:
+        raise ValueError(f'Modality {modality} is not implemented, \
+                                    please choose between `text` or `image`.')
 
 if __name__ == '__main__':
     main()
