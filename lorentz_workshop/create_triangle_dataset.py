@@ -36,6 +36,7 @@ def rotate(x, y, theta):
 
 thetas = np.linspace(-2 * np.pi / 3, 4 * np.pi / 3, 300)
 
+colormap = plt.cm.gray
 nus = np.logspace(np.log10(1.0), np.log10(50.0), 36, base=10.0)
 # Plot
 n_rows = 6
@@ -49,8 +50,8 @@ for i, nu in enumerate(nus):
     rand_theta = np.random.uniform(0, 2 * np.pi)
     x, y = rotate(x, y, rand_theta)
     # Plot and fill
-    # Change background color
-    ax[row_idx, col_idx].fill(x, y, color='gray')
+    rand_color = np.random.randint(0, 255)
+    ax[row_idx, col_idx].fill(x, y, color=colormap(rand_color))
     ax[row_idx, col_idx].set_aspect('equal')
     ax[row_idx, col_idx].set_axis_off()
 
