@@ -28,20 +28,29 @@ def pol2cart(rho, phi):
     return(x, y)
 
 
+def rotate(x, y, theta):
+    x_rot = x * np.cos(theta) - y * np.sin(theta)
+    y_rot = x * np.sin(theta) + y * np.cos(theta)
+    return x_rot, y_rot
+
+
 thetas = np.linspace(-2 * np.pi / 3, 4 * np.pi / 3, 300)
 
 nus = np.logspace(np.log10(1.0), np.log10(50.0), 36, base=10.0)
 # Plot
 n_rows = 6
 n_cols = math.ceil(len(nus) / n_rows)
-fig, ax = plt.subplots(n_rows, n_cols)
+fig, ax = plt.subplots(n_rows, n_cols, facecolor='black')
 for i, nu in enumerate(nus):
     row_idx = i // n_cols
     col_idx = i % n_cols
     rhos = spherical_triangle(thetas, n=nu)
     x, y = pol2cart(rhos, thetas)
+    rand_theta = np.random.uniform(0, 2 * np.pi)
+    x, y = rotate(x, y, rand_theta)
     # Plot and fill
-    ax[row_idx, col_idx].fill(x, y, color='k')
+    # Change background color
+    ax[row_idx, col_idx].fill(x, y, color='gray')
     ax[row_idx, col_idx].set_aspect('equal')
     ax[row_idx, col_idx].set_axis_off()
 
