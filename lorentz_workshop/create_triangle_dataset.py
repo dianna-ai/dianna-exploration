@@ -1,14 +1,15 @@
+"""
+Inspired by https://math.stackexchange.com/questions/786335/is-there-a-function-that-draws-a-triangle-with-rounded-edges
+"""
 import math
 import matplotlib.pyplot as plt
 import numpy as np
 
-thetas = np.linspace(-2 * np.pi / 3, 4 * np.pi / 3, 300)
-
 
 def ang(thetas):
     new_thetas = np.zeros_like(thetas)
-    new_thetas[np.logical_and(0 < thetas, thetas < 2 * np.pi / 3)] = thetas[np.logical_and(0 < thetas, thetas < 2 * np.pi / 3)] + 2 * np.pi / 3
-    new_thetas[np.logical_and(2 * np.pi / 3 < thetas, thetas < 4 * np.pi / 3)] = thetas[np.logical_and(2 * np.pi / 3 < thetas, thetas < 4 * np.pi / 3)]
+    new_thetas[np.logical_and(0 <= thetas, thetas < 2 * np.pi / 3)] = thetas[np.logical_and(0 <= thetas, thetas < 2 * np.pi / 3)] + 2 * np.pi / 3
+    new_thetas[np.logical_and(2 * np.pi / 3 <= thetas, thetas <= 4 * np.pi / 3)] = thetas[np.logical_and(2 * np.pi / 3 <= thetas, thetas <= 4 * np.pi / 3)]
     new_thetas[np.logical_and(-4 * np.pi / 3 < thetas, thetas < 0)] = thetas[np.logical_and(-4 * np.pi / 3 < thetas, thetas < 0)] - 2 * np.pi / 3
     return new_thetas
 
@@ -27,7 +28,9 @@ def pol2cart(rho, phi):
     return(x, y)
 
 
-nus = np.linspace(1.0, 100.0, 36) ** 0.2
+thetas = np.linspace(-2 * np.pi / 3, 4 * np.pi / 3, 300)
+
+nus = np.logspace(np.log10(1.0), np.log10(50.0), 36, base=10.0)
 # Plot
 n_rows = 6
 n_cols = math.ceil(len(nus) / n_rows)
@@ -37,9 +40,9 @@ for i, nu in enumerate(nus):
     col_idx = i % n_cols
     rhos = spherical_triangle(thetas, n=nu)
     x, y = pol2cart(rhos, thetas)
-    ax[row_idx, col_idx].plot(x, y, color='k', linewidth=10)
+    # Plot and fill
+    ax[row_idx, col_idx].fill(x, y, color='k')
     ax[row_idx, col_idx].set_aspect('equal')
     ax[row_idx, col_idx].set_axis_off()
 
 plt.show()
-
