@@ -119,3 +119,10 @@ venv.bak/
 # PyCharm
 .idea/
 
+lorentz_workshop/data/*
+
+lorentz_workshop/models/*
+
+lorentz_workshop/gradcam/*.npz
+
+lorentz_workshop/gradcam/*.pk
