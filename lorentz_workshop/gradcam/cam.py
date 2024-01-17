@@ -91,7 +91,9 @@ def get_loader(data_path,batch_size):
     # data = np.load("../../example_data/dataset_preparation/geometric_shapes/test_colors.npz")
     data = dict(np.load(data_path))
     data['images']          = np.array(data['images']) / 255.
-    data['labels']           = np.array(data['labels']) / 255.
+    data['images']          = data['images'][:100]
+    data['labels']          = np.array(data['labels']) / 255.
+    data['labels']          = data['labels'][:100]
     test_X_torch = torch.from_numpy(data['images']).type(torch.FloatTensor)
     test_y_torch = torch.from_numpy(data['labels']).type(torch.LongTensor)
     test_X_torch = test_X_torch.view(-1, 1, 64, 64)
