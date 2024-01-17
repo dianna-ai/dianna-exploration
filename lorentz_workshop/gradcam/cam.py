@@ -9,6 +9,7 @@ import cv2
 from matplotlib import pyplot as plt
 import pickle
 from sklearn.preprocessing import StandardScaler
+import argparse
 
 class ShapesNet(nn.Module):
     def __init__(self, kernels=[8, 16], dropout = 0.2, classes=2):
@@ -86,11 +87,13 @@ def correct_file(data_path):
 
 
 def get_loader(data_path,batch_size):
-    data                    = pickle.load(open(data_path, 'rb'))
-    data['images']          = np.array(data['images'])/255.
-    data['lable']           = np.array(data['lable']) / 255.
+    # data                    = pickle.load(open(data_path, 'rb'))
+    # data = np.load("../../example_data/dataset_preparation/geometric_shapes/test_colors.npz")
+    data = dict(np.load(data_path))
+    data['images']          = np.array(data['images']) / 255.
+    data['labels']           = np.array(data['labels']) / 255.
     test_X_torch = torch.from_numpy(data['images']).type(torch.FloatTensor)
-    test_y_torch = torch.from_numpy(data['lable']).type(torch.LongTensor)
+    test_y_torch = torch.from_numpy(data['labels']).type(torch.LongTensor)
     test_X_torch = test_X_torch.view(-1, 1, 64, 64)
     test_set = torch.utils.data.TensorDataset(test_X_torch, test_y_torch)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False)
@@ -139,8 +142,13 @@ def pca(x):
     return X_train_pca
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-p", default="../../example_data/dataset_preparation/geometric_shapes/test_colors.npz")
+    args = parser.parse_args()
+    DATA_PATH =  args.p
     # DATA_PATH           = './data/shapes.npz'
-    DATA_PATH           = './test_rotation_mod.pk'
+    # DATA_PATH           = './test_rotation_mod.pk'
+    # DATA_PATH           = "../../example_data/dataset_preparation/geometric_shapes/test_colors.npz"
     MODEL_PATH          = './retrain_geometric_shapes_model.pt'
     OUT_PATH            = './outheatmap.npz'
     batch_size          = 1
@@ -189,7 +197,11 @@ if __name__ == '__main__':
     print(grayscale_cam.min(), grayscale_cam.max(), imgs[0].min(),imgs[0].max())
     cams = np.array(cams)
 
-    np.savez(OUT_PATH, heatmaps = cams, angles=data['angle'])
+    np.savez(OUT_PATH, heatmaps = cams, 
+             color=data['color'], 
+             rotation=data['rotation'],
+             roundedness=data['roundedness'],
+             data_path = DATA_PATH)
     # import nptsne
 
     # tsneobj = nptsne.TextureTsne(False, 1000, 2, 20, 800, nptsne.KnnAlgorithm.Flann)
