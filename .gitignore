@@ -126,3 +126,5 @@ lorentz_workshop/models/*
 # lorentz_workshop/gradcam/*.npz
 
 lorentz_workshop/gradcam/*.pk
+
+lorentz_workshop/gradcam/outheatmap.npz
