@@ -1,0 +1,10 @@
+Stanford Sentiment Treebank V2, downloaded from:
+https://gluebenchmark.com/tasks
+Direct link:
+https://dl.fbaipublicfiles.com/glue/data/SST-2.zip
+
+The original SST dataset is available in the original folder
+This version has been split in to a train/test/validation dataset,
+and uses two classes:
+0 = negative
+1 = positive
