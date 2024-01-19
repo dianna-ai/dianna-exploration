@@ -11,8 +11,8 @@ canon_theta = np.deg2rad(-30)
 
 colormap = plt.cm.gray
 # nus = np.logspace(np.log10(1e-6), np.log10(1.0), 36, base=10.0)
-# nus = np.logspace(-1.5, 1.2, 36)
-nus = np.linspace(1e-3, 1.0, 36)
+nus = np.logspace(-1.5, 1.1, 36)
+# nus = np.linspace(1e-3, 1.0, 36)
 # Plot
 n_rows = 6
 n_cols = math.ceil(len(nus) / n_rows)
@@ -27,8 +27,9 @@ for i, nu in enumerate(nus):
     rand_theta = np.random.uniform(0, 2 * np.pi)
     x, y = rotate(x, y, canon_theta + rand_theta)
     # Random color, don't sample completely black
-    rand_color = np.random.randint(20, 255)
+    rand_color = np.random.randint(50, 255)
     # Fill
     plot_triangle(ax[row_idx, col_idx], x, y, color=rand_color)
 
-plt.show()
+# plt.show()
+plt.savefig("triangles_dataset.png", facecolor="black", dpi=300, bbox_inches="tight")
