@@ -10,7 +10,6 @@ from matplotlib import pyplot as plt
 import pickle
 from sklearn.preprocessing import StandardScaler
 import argparse
-from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget, BinaryClassifierOutputTarget
 
 class ShapesNet(nn.Module):
     def __init__(self, kernels=[8, 16], dropout = 0.2, classes=2):
@@ -91,15 +90,8 @@ def get_loader(data_path,batch_size):
     # data                    = pickle.load(open(data_path, 'rb'))
     # data = np.load("../../example_data/dataset_preparation/geometric_shapes/test_colors.npz")
     data = dict(np.load(data_path))
-    if 'color' in data_path.split('/')[-1]:
-        data['images']          = np.array(data['images']) / 255.
-    elif 'rotation' in data_path.split('/')[-1]:
-        data['images']          = np.array(data['images']) / 255.
-    elif 'roundedness' in data_path.split('/')[-1]:
-        data['images']          = np.array(data['images'])
-    data['images']          = data['images'][:100]
-    data['labels']          = np.array(data['labels'])
-    data['labels']          = data['labels'][:100]
+    data['images']          = np.array(data['images']) / 255.
+    data['labels']           = np.array(data['labels']) / 255.
     test_X_torch = torch.from_numpy(data['images']).type(torch.FloatTensor)
     test_y_torch = torch.from_numpy(data['labels']).type(torch.LongTensor)
     test_X_torch = test_X_torch.view(-1, 1, 64, 64)
@@ -151,22 +143,21 @@ def pca(x):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-p", default="../../example_data/dataset_preparation/geometric_shapes/test_colors.npz")
+    path = "../../example_data/dataset_preparation/geometric_shapes/test_roundedness.npz"
+    parser.add_argument("-p", default=path)
     args = parser.parse_args()
     DATA_PATH =  args.p
-    # DATA_PATH           = './data/shapes.npz'
-    # DATA_PATH           = './test_rotation_mod.pk'
-    # DATA_PATH           = "../../example_data/dataset_preparation/geometric_shapes/test_colors.npz"
+    print(DATA_PATH)
+
     MODEL_PATH          = './retrain_geometric_shapes_model.pt'
     OUT_PATH            = './outheatmap.npz'
     batch_size          = 1
 
-    #test_loader         = get_loader_orig(DATA_PATH, batch_size)
-    test_loader,data    = get_loader(DATA_PATH,batch_size)
+    test_loader,data    = get_loader(DATA_PATH, batch_size)
     imgs                = data['images']
     model               = ShapesNet().to('cpu')
     print(model.layer2)
-    # criterion           = nn.CrossEntropyLoss().to('cpu')
+    criterion           = nn.CrossEntropyLoss().to('cpu')
     model.load_state_dict(torch.load(os.path.join(MODEL_PATH))['model_state_dict'])
 
     correct             = 0
@@ -175,14 +166,14 @@ if __name__ == '__main__':
     for batch_idx, (test_imgs, test_labels) in enumerate(test_loader):
         test_imgs       = torch.autograd.Variable(test_imgs).float()
         cam             = GradCAM(model=model, target_layers=model.layer2)
-        grayscale_cam   = cam(input_tensor=test_imgs, targets=[ClassifierOutputTarget(torch.argmax(model(test_imgs)))])
+        grayscale_cam   = cam(input_tensor=test_imgs, targets=None)
 
         # In this example grayscale_cam has only one image in the batch:
         grayscale_cam   = grayscale_cam[0, :]
-        grayscale_cam   = (grayscale_cam - grayscale_cam.min())/(grayscale_cam.max() - grayscale_cam.min() + 10e-7)
-        # rgb_img         = (np.array(test_imgs[0,0])*255).astype('uint8')
-        # rgb_img         = cv2.cvtColor(rgb_img, cv2.COLOR_GRAY2RGB)
-        # rgb_img         = rgb_img/255.
+        grayscale_cam   = (grayscale_cam - grayscale_cam.min())/(grayscale_cam.max() - grayscale_cam.min())
+        rgb_img         = (np.array(test_imgs[0,0])*255).astype('uint8')
+        rgb_img         = cv2.cvtColor(rgb_img, cv2.COLOR_GRAY2RGB)
+        rgb_img         = rgb_img/255.
 
         heatmap         = cv2.applyColorMap(np.uint8(255 * grayscale_cam), cv2.COLORMAP_TWILIGHT_SHIFTED)
 
@@ -205,25 +196,9 @@ if __name__ == '__main__':
     print(grayscale_cam.min(), grayscale_cam.max(), imgs[0].min(),imgs[0].max())
     cams = np.array(cams)
 
-    np.savez(OUT_PATH, heatmaps = cams, 
-             color=data['color'], 
+    np.savez(OUT_PATH,
+             heatmaps = cams,
+             color=data['color'],
              rotation=data['rotation'],
              roundedness=data['roundedness'],
-             data_path = DATA_PATH)
-    # import nptsne
-
-    # tsneobj = nptsne.TextureTsne(False, 1000, 2, 20, 800, nptsne.KnnAlgorithm.Flann)
-    # embedding = tsneobj.fit_transform(imgs.reshape(imgs.shape[0],imgs.shape[1]*imgs.shape[2] ))
-    # embedding = embedding.reshape((int(embedding.shape[0] / 2), 2))
-
-    # embedding1 = tsneobj.fit_transform(imgs.reshape(cams.shape[0], cams.shape[1] * cams.shape[2]))
-    # embedding1 = embedding1.reshape((int(embedding1.shape[0] / 2), 2))
-
-    # #embedding_pca  = pca(imgs.reshape(imgs.shape[0],imgs.shape[1]*imgs.shape[2] ))
-    # #embedding_pca1 = pca(cams.reshape(cams.shape[0], cams.shape[1] * cams.shape[2]))
-
-    # fig, ax = plt.subplots(1,2)
-    # ax[0].scatter(embedding[:,0], embedding[:,1],c=)
-    # ax[1].scatter(embedding1[:, 0], embedding1[:, 1])
-    # plt.show()
-    # print(embedding.shape)
+             data_path=DATA_PATH)
