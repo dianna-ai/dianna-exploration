@@ -1,13 +1,10 @@
-import json
 import pickle
-
-import distance_explainer
-import numpy as np
-
-from tensorflow.keras.applications.vgg16 import VGG16
 import warnings
 from pathlib import Path
+
+import distance_explainer
 import matplotlib.pyplot as plt
+from tensorflow.keras.applications.vgg16 import VGG16
 
 from notebooks_for_distance_explainer.nice_picture_mprt import NicePicturesMPRT
 
@@ -15,11 +12,10 @@ warnings.filterwarnings('ignore')  # disable warnings related to versions of tf
 import numpy as np
 
 
-def main(n_masks=1000):
+def main(n_masks=1000, layer_order='bottom_up'):
     def load_img(path, target_size):
         from tensorflow.keras.preprocessing import image
         from tensorflow.keras.applications.resnet50 import preprocess_input
-        print(Path(path).absolute())
         img = image.load_img(path, target_size=target_size)
         x = image.img_to_array(img)
         x = np.expand_dims(x, axis=0)
@@ -67,9 +63,10 @@ def main(n_masks=1000):
         else:
             return saliencies
 
-    attribution_maps_path = Path('_'.join(['attribution_maps', str(n_masks), input_title, reference_title]) + '.pk')
+    attribution_maps_path = Path('_'.join(
+        ['attribution_maps', str(n_masks), input_title, reference_title, layer_order]) + '.pk')
     if not attribution_maps_path.exists():
-        onze_MPRT = NicePicturesMPRT()
+        onze_MPRT = NicePicturesMPRT(layer_order=layer_order)
         for i in range(1):
             onze_MPRT(
                 model=model,
@@ -98,9 +95,27 @@ def main(n_masks=1000):
         return [x for xs in xss for x in xs]
 
     layer_set = range(0, plot_step_layers * (plot_N_layers + 1), plot_step_layers)
+
+    axis = flatten(axs)[0]
+    axis.set_axis_off()
+    axis.set_title(f'input')
+    axis.imshow(bee_img)
+
     for ax_ix, layer in enumerate(layer_set):
-        flatten(axs)[ax_ix].imshow(attribution_maps[layer], cmap='Greys')
+        axis = flatten(axs)[ax_ix + 1]
+        axis.set_axis_off()
+        axis.set_title(f'layer {layer}')
+        axis.imshow(attribution_maps[layer], cmap='Greys')
+
+    n_total_figs = n_rows * n_columns
+    for ax_ix in range(n_total_figs - (n_total_figs + 1 - plot_N_layers), n_total_figs):
+        print(ax_ix)
+        axis = flatten(axs)[ax_ix]
+        axis.set_axis_off()
+
+    fig.savefig('temp_image.png')
 
 
 if __name__ == '__main__':
-    main()
+    for layer_order in ['bottom_up', 'top_down', 'independent']:
+        main(layer_order=layer_order)
