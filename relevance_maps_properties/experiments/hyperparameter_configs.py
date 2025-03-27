@@ -5,7 +5,7 @@ from typing import Mapping, Optional, Iterable, Sequence, Union
 from sklearn.model_selection import ParameterGrid
 from sklearn.linear_model import Ridge
 
-from .config_wrappers import Slic_Wrapper
+from .models import Slic_Wrapper
 
 
 class ParamGrid(ParameterGrid):
@@ -88,6 +88,7 @@ class LIME_parameters(object):
                  feature_selection: Optional[Iterable] = None,
                  distance_metric: Optional[Iterable] = None,
                  segmentation_fn: Optional[Iterable] = None,
+                 num_features: Optional[Iterable] = None,
                  model_regressor: Optional[Iterable] = None,
                  random_state: Optional[Iterable] = None):
         '''
@@ -104,6 +105,7 @@ class LIME_parameters(object):
         self.kernel_width = kernel_width
         self.feature_selection = feature_selection
         self.distance_metric = distance_metric 
+        self.num_features = num_features
         self.segmentation_fn = segmentation_fn
         self.model_regressor = model_regressor
         self.random_state = random_state
@@ -113,6 +115,7 @@ class SHAP_parameters(object):
     ''' Set up hyperparameters for KernelSHAP.'''
     def __init__(self, 
                  nsamples: Optional[Iterable] = None,
+                 n_segments: Optional[Iterable] = None,
                  background: Optional[Iterable]= None,
                  sigma: Optional[Iterable] = None,
                  l1_reg: Optional[Iterable] = None, 
@@ -125,7 +128,8 @@ class SHAP_parameters(object):
             l1_reg: L1 regularization factor
             random_state: random seed
         '''
-        self.nsamples = nsamples,
+        self.nsamples = nsamples
+        self.n_segments = n_segments
         self.background = background
         self.sigma = sigma
         self.l1_reg = l1_reg
@@ -133,25 +137,28 @@ class SHAP_parameters(object):
 
 
 RISE_config = RISE_parameters(
-    n_masks=np.arange(200, 2000, 400),
-    p_keep = np.arange(.1, 1, .1),
-    feature_res=np.arange(3, 16, 3),
+    n_masks=np.arange(400, 2000, 200),
+    p_keep = np.arange(.05, 1, .05),
+    # feature_res=np.arange(3, 16, 3),
     random_state=[42]
 )
 
 
 LIME_config = LIME_parameters(
-    num_samples=np.arange(20, 200, 40),
-    kernel_width=np.geomspace(0.1, 3, num=5),
-    distance_metric=None, # will extend later
-    segmentation_fn=[Slic_Wrapper(n_segments=n) for n in range(10, 60,10)],
+    num_samples=np.arange(400, 2000, 400),
+    kernel_width=np.geomspace(10, 100, num=5),
+    # distance_metric=None, # will extend later
+    # segmentation_fn=[Slic_Wrapper(n_segments=n) for n in range(10, 60,10)],
+    num_features = [None],
+    feature_selection=['none'],
     model_regressor=[Ridge(alpha=a) for a in [0, *np.geomspace(0.05, 3, num=4)]]
     # random_state = [42]
 )
 
 
 SHAP_config = SHAP_parameters(
-    nsamples=np.arange(20, 200, 40),
-    l1_reg=[0, *np.geomspace(0.05, 3, num=4)],
+    nsamples=np.arange(60, 270, 40),
+    n_segments = np.arange(10, 60, 10),
+    l1_reg=[0.1, *np.geomspace(0.5, 3, num=4)],
     random_state=[42]
 )
